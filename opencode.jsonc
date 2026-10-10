@@ -1,5 +1,11 @@
 {
   "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "i-matthew-tanner": {
+      "type": "remote",
+      "url": "https://mcp.matthewtanner.app/mcp"
+    }
+  },
   // Project instructions are auto-loaded from the root AGENTS.md
   // (OpenCode V2 does not load the `instructions` config field — AGENTS.md is the source of truth).
   "commands": {
