@@ -1,5 +1,10 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { ApiError, createApiClient, type Product } from 'api-client';
+import {
+  ApiError,
+  createApiClient,
+  type PaginatedProducts,
+  type Product,
+} from 'api-client';
 
 const client = createApiClient('');
 
@@ -21,9 +26,17 @@ function messageFor(error: unknown): string {
 
 export function App() {
   const [health, setHealth] = useState('checking…');
-  const [products, setProducts] = useState<Product[]>([]);
+  const [listing, setListing] = useState<PaginatedProducts | null>(null);
+  const [page, setPage] = useState(1);
+  const [search, setSearch] = useState('');
+  const [searchInput, setSearchInput] = useState('');
+  const [refreshKey, setRefreshKey] = useState(0);
   const [form, setForm] = useState<ProductFormState>(EMPTY_FORM);
   const [message, setMessage] = useState('');
+  const [token, setToken] = useState<string | undefined>(undefined);
+  const [username, setUsername] = useState('');
+  const [credentials, setCredentials] = useState({ username: '', password: '' });
+  const loggedIn = token !== undefined;
 
   useEffect(() => {
     void (async () => {
@@ -33,18 +46,21 @@ export function App() {
       } catch {
         setHealth('unreachable — start the Django server (python manage.py runserver)');
       }
-      await refresh();
     })();
   }, []);
 
-  async function refresh(): Promise<void> {
-    try {
-      setProducts(await client.listProducts());
-      setMessage('');
-    } catch (error) {
-      setMessage(messageFor(error));
-    }
-  }
+  // Reload the current page whenever the search term, page, auth state or a
+  // mutation (create/delete) changes.
+  useEffect(() => {
+    void (async () => {
+      try {
+        setListing(await client.listProducts({ search: search === '' ? undefined : search, page }));
+        setMessage('');
+      } catch (error) {
+        setMessage(messageFor(error));
+      }
+    })();
+  }, [page, search, token, refreshKey]);
 
   function setField(field: keyof ProductFormState, value: string): void {
     setForm((prev) => ({ ...prev, [field]: value }));
@@ -55,7 +71,10 @@ export function App() {
     try {
       await client.createProduct(form);
       setForm(EMPTY_FORM);
-      await refresh();
+      setPage(1);
+      setSearch('');
+      setSearchInput('');
+      setRefreshKey((key) => key + 1);
     } catch (error) {
       setMessage(messageFor(error));
     }
@@ -64,16 +83,76 @@ export function App() {
   async function handleDelete(id: number): Promise<void> {
     try {
       await client.deleteProduct(id);
-      await refresh();
+      setRefreshKey((key) => key + 1);
     } catch (error) {
       setMessage(messageFor(error));
     }
+  }
+
+  function handleSearch(event: FormEvent<HTMLFormElement>): void {
+    event.preventDefault();
+    setSearch(searchInput);
+    setPage(1);
+  }
+
+  async function handleLogin(event: FormEvent<HTMLFormElement>): Promise<void> {
+    event.preventDefault();
+    try {
+      const result = await client.login(credentials.username, credentials.password);
+      client.setToken(result.token);
+      setToken(result.token);
+      setUsername(result.username);
+      setCredentials({ username: '', password: '' });
+      setMessage('');
+    } catch (error) {
+      setMessage(messageFor(error));
+    }
+  }
+
+  function handleLogout(): void {
+    client.setToken(undefined);
+    setToken(undefined);
+    setUsername('');
   }
 
   return (
     <main>
       <h1>Product Store</h1>
       <p>Health: {health}</p>
+
+      <section aria-label="Account">
+        {loggedIn ? (
+          <p>
+            Signed in as <strong>{username}</strong>{' '}
+            <button type="button" onClick={handleLogout}>
+              Log out
+            </button>
+          </p>
+        ) : (
+          <form onSubmit={(event) => void handleLogin(event)}>
+            <input
+              value={credentials.username}
+              onChange={(event) =>
+                setCredentials((prev) => ({ ...prev, username: event.target.value }))
+              }
+              placeholder="Username"
+              autoComplete="username"
+              required
+            />
+            <input
+              value={credentials.password}
+              onChange={(event) =>
+                setCredentials((prev) => ({ ...prev, password: event.target.value }))
+              }
+              placeholder="Password"
+              type="password"
+              autoComplete="current-password"
+              required
+            />
+            <button type="submit">Log in</button>
+          </form>
+        )}
+      </section>
 
       <form onSubmit={(event) => void handleSubmit(event)}>
         <input
@@ -100,7 +179,23 @@ export function App() {
           placeholder="Description (optional)"
         />
         <button type="submit">Create product</button>
+        {!loggedIn && <span>— sign in to create products</span>}
       </form>
+
+      <form onSubmit={handleSearch}>
+        <input
+          value={searchInput}
+          onChange={(event) => setSearchInput(event.target.value)}
+          placeholder="Search by name, sku or description"
+        />
+        <button type="submit">Search</button>
+      </form>
+
+      {listing !== null && (
+        <p>
+          {listing.count} product{listing.count === 1 ? '' : 's'}
+        </p>
+      )}
 
       <table>
         <thead>
@@ -113,7 +208,7 @@ export function App() {
           </tr>
         </thead>
         <tbody>
-          {products.map((product) => (
+          {(listing?.results ?? []).map((product: Product) => (
             <tr key={product.id}>
               <td>{product.name}</td>
               <td>${product.price}</td>
@@ -128,6 +223,24 @@ export function App() {
           ))}
         </tbody>
       </table>
+
+      <p>
+        <button
+          type="button"
+          disabled={!listing?.previous}
+          onClick={() => setPage((prev) => Math.max(1, prev - 1))}
+        >
+          Previous
+        </button>{' '}
+        <span>Page {page}</span>{' '}
+        <button
+          type="button"
+          disabled={!listing?.next}
+          onClick={() => setPage((prev) => prev + 1)}
+        >
+          Next
+        </button>
+      </p>
 
       {message !== '' && <p id="message">{message}</p>}
     </main>

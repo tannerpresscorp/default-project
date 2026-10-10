@@ -11,6 +11,18 @@
   `requirements.txt` (+ `requirements-dev.txt` for pytest). App `api` exposes `GET /api/health/`
   and full CRUD on `Product` at `/api/products/` (DRF ModelViewSet, JSON). `price` is a
   `DecimalField`, serialized as a **string** in JSON.
+- **Auth:** DRF token auth (`rest_framework.authtoken`, header `Authorization: Token <key>`).
+  `POST /api/auth/login/` (username + password) returns `{token, username}` (LoginView, an
+  `ObtainAuthToken` subclass). Products use `IsAuthenticatedOrReadOnly`: **reads are public,
+  writes require a token** (anonymous writes → 401). Demo user for local dev: `alice` /
+  `secret123` (not shipped; create via `manage.py createsuperuser` or a shell).
+- **Search + pagination:** products use DRF `SearchFilter` (`?search=` across name/sku/description)
+  and page-number pagination via `api.pagination.StandardPagination` (`page` + `page_size` params,
+  default `page_size` 10, max 100). List shape: `{count, next, previous, results}`.
+- **OpenAPI:** `drf-spectacular` 0.30 (`/api/schema/` JSON, `/api/docs/` Swagger UI; both public).
+  A committed schema snapshot lives at the repo root as **`openapi.json`** (JSON format) — the
+  source for the generated client. `LoginView` declares its request/response schemas explicitly
+  via `@extend_schema` (`LoginRequestSerializer` / `LoginResponseSerializer`).
 - **Node:** pnpm workspace (`pnpm-workspace.yaml` → `packages/*`). Root scripts delegate with
   `pnpm -r`. Commit `pnpm-lock.yaml`; `node_modules/` is gitignored.
 
@@ -23,43 +35,61 @@
 ## Commands (verified)
 Node / workspace — root scripts delegate across all packages:
 - `pnpm install` · `pnpm lint` (= `pnpm -r lint`) · `pnpm typecheck` · `pnpm test`
-- Per package: `pnpm --filter api-client <script>` / `pnpm --filter web <script>`
+- Per package: `pnpm --filter api-client <script>` / `pnpm --filter api-client-generated <script>` /
+  `pnpm --filter web <script>`
 - `api-client` toolchain: TypeScript (`tsc --noEmit`), ESLint 10 flat config
   (`eslint.config.mjs`), tests via Node's built-in runner (`node --test src`, no test framework dep).
-  Client surface: `createApiClient(baseUrl)` → `health` / `listProducts` / `getProduct` /
+  Client surface: `createApiClient(baseUrl, {token?})` → `health` / `login` / `setToken` /
+  `listProducts({search?, page?, page_size?})` → `PaginatedProducts` / `getProduct` /
   `createProduct` / `updateProduct` (PATCH) / `deleteProduct`, throwing `ApiError` on non-2xx.
   `Product.price` is typed as a string (mirrors DRF serialization). Unit tests stub global fetch.
+- `api-client-generated` toolchain: `@hey-api/openapi-ts` v0.99 emits a typed fetch client into
+  `src/` (client/core modules + `sdk.gen.ts` / `types.gen.ts` / `index.ts`) from the committed
+  `openapi.json`. The hand-written **`index.ts` at the package root** (package entry) wraps it
+  with `createApiClient({baseUrl, token?})` — it lives **outside `src/`** because `pnpm --filter
+  api-client-generated generate` wipes `src/` on every run. Generated files (`src/**/*.gen.ts`)
+  are skipped by ESLint. No test script (skipped by `pnpm -r test`). Regeneration pipeline:
+  1. `.venv\Scripts\python.exe manage.py spectacular --file openapi.json --format openapi-json`
+  2. `pnpm --filter api-client-generated generate`
 - `web` toolchain: Vite 8 (rolldown) + React 19 + strict TS, ESLint 10 flat config with
   `eslint-plugin-react-hooks` (`configs.flat['recommended-latest']`). No unit tests yet — the
   `test` script is absent, so `pnpm -r test` skips it. `typescript` is pinned to `^5.9` because
   `typescript-eslint` 8 requires `<6.1` (do **not** bump to TS 7/native).
 - Frontend dev flow: run Django first (`manage.py runserver` on 8000), then `pnpm --filter web dev`
   (Vite on 5173). The browser only talks to the Vite origin — `vite.config.ts` proxies `/api/*` to
-  Django, so no CORS setup is needed and the client is used with an empty base URL.
+  Django, so no CORS setup is needed and the client is used with an empty base URL. The store has
+  a login form (token kept in React state only — lost on reload), product search, pagination
+  controls, and create/delete (both require login server-side).
 
 Django — run via the venv: `.venv\Scripts\python.exe manage.py <cmd>` on Windows, or activate
 `.venv` first (if PowerShell blocks activation, `Set-ExecutionPolicy -Scope Process Bypass`):
 - `python -m venv .venv` · `pip install -r requirements.txt` (dev: `-r requirements-dev.txt`)
 - `manage.py runserver` · `check`
 - `pytest` — primary Django test runner (config: `pytest.ini`, plugin pytest-django)
-- `manage.py makemigrations` / `migrate` — **commit migration files**
+- `manage.py makemigrations` / `migrate` — **commit migration files** (authtoken's tables come
+  from DRF's own migrations when you `migrate` after adding `rest_framework.authtoken`)
 
 Expected verify order when changing code: **lint -> typecheck -> test** (Node), plus
-`manage.py check` / `manage.py test` (Django).
+`manage.py check` / `manage.py test` (Django). When touching the schema server-side, regenerate
+`openapi.json` and the generated client (see above) so committed types stay fresh.
 
 ## Layout
-- Repo root: `manage.py`, `config/` (Django project incl. `settings.py`), `api/` (Django app:
-  `views.py`, `serializers.py`, `urls.py`, `models.py`, `migrations/`, `test_health.py`,
-  `test_products.py`), `package.json`, `pnpm-workspace.yaml`, `requirements.txt`,
-  `requirements-dev.txt`, `pytest.ini`, `opencode.jsonc`, `AGENTS.md`.
-- `packages/api-client` — TypeScript package (`src/index.ts` + `src/index.test.ts`) with real
-  lint/typecheck/test scripts.
-- `packages/web` — small React frontend consuming `api-client` (`index.html`, `src/main.tsx`,
+- Repo root: `manage.py`, `config/` (Django project incl. `settings.py` with `REST_FRAMEWORK` +
+  `SPECTACULAR_SETTINGS`), `api/` (Django app: `views.py`, `serializers.py`, `urls.py`,
+  `pagination.py`, `models.py`, `migrations/`, `test_health.py`, `test_products.py`,
+  `test_auth.py`), `openapi.json` (committed schema snapshot), `package.json`,
+  `pnpm-workspace.yaml`, `requirements.txt`, `requirements-dev.txt`, `pytest.ini`,
+  `opencode.jsonc`, `AGENTS.md`.
+- `packages/api-client` — hand-written TypeScript package (`src/index.ts` + `src/index.test.ts`)
+  with lint/typecheck/test scripts.
+- `packages/api-client-generated` — `@hey-api/openapi-ts` output in `src/` + hand-written root
+  `index.ts` entry; `openapi-ts.config.ts` reads `../../openapi.json`.
+- `packages/web` — React frontend consuming `api-client` (`index.html`, `src/main.tsx`,
   `src/App.tsx`, `src/style.css`, `vite.config.ts` with the Django proxy). `dist/` is gitignored.
 - `.github/workflows/ci.yml` — CI gate: `node` job (`pnpm lint/typecheck/test` +
   `pnpm --filter web build`) and `django` job (`manage.py check`, `pytest`); runs on push/PR at
   github.com/imatthewtanner/default-project.
-- Gitignored: `.venv/`, `node_modules/`, `db.sqlite3`, `__pycache__/`.
+- Gitignored: `.venv/`, `node_modules/`, `db.sqlite3`, `__pycache__/`, `web/dist/` + build output.
 
 ## OpenCode setup
 - `opencode.jsonc` defines `/verify` (Node verify loop) and `/verify-server` (Django checks +

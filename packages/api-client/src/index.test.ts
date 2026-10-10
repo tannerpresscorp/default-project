@@ -17,6 +17,13 @@ const PRODUCT_JSON = {
   updated_at: '2026-10-10T00:00:00Z',
 };
 
+const PAGINATED_JSON = {
+  count: 1,
+  next: null,
+  previous: null,
+  results: [PRODUCT_JSON],
+};
+
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
@@ -41,17 +48,48 @@ test('health() GETs /api/health/ and returns the parsed JSON body', async (t) =>
   assert.equal(calls[0].url, 'http://localhost:8000/api/health/');
 });
 
-test('listProducts() GETs /api/products/ and parses the JSON array', async (t) => {
+test('listProducts() GETs /api/products/ and parses the paginated envelope', async (t) => {
   const calls: FetchCall[] = [];
   t.mock.method(globalThis, 'fetch', async (input: unknown, init?: RequestInit) => {
     calls.push({ url: String(input), init });
-    return jsonResponse([PRODUCT_JSON]);
+    return jsonResponse(PAGINATED_JSON);
   });
 
   // Trailing slash on the base URL must be stripped.
-  const products = await createApiClient('http://localhost:8000/').listProducts();
-  assert.equal(products.length, 1);
-  assert.equal(products[0].price, '49.99');
+  const result = await createApiClient('http://localhost:8000/').listProducts();
+  assert.equal(result.count, 1);
+  assert.equal(result.results.length, 1);
+  assert.equal(result.results[0].price, '49.99');
+  assert.equal(calls[0].url, 'http://localhost:8000/api/products/');
+});
+
+test('listProducts() serializes search/page/page_size into the query string', async (t) => {
+  const calls: FetchCall[] = [];
+  t.mock.method(globalThis, 'fetch', async (input: unknown, init?: RequestInit) => {
+    calls.push({ url: String(input), init });
+    return jsonResponse(PAGINATED_JSON);
+  });
+
+  await createApiClient('http://localhost:8000').listProducts({
+    search: 'mouse',
+    page: 2,
+    page_size: 5,
+  });
+
+  const params = new URL(calls[0].url).searchParams;
+  assert.equal(params.get('search'), 'mouse');
+  assert.equal(params.get('page'), '2');
+  assert.equal(params.get('page_size'), '5');
+});
+
+test('listProducts() omits the query string when no params are given', async (t) => {
+  const calls: FetchCall[] = [];
+  t.mock.method(globalThis, 'fetch', async (input: unknown, init?: RequestInit) => {
+    calls.push({ url: String(input), init });
+    return jsonResponse(PAGINATED_JSON);
+  });
+
+  await createApiClient('http://localhost:8000').listProducts();
   assert.equal(calls[0].url, 'http://localhost:8000/api/products/');
 });
 
@@ -84,6 +122,7 @@ test('createProduct() POSTs a JSON body with the correct content-type', async (t
   assert.equal(calls[0].url, 'http://localhost:8000/api/products/');
   assert.equal(calls[0].init?.method, 'POST');
   assert.equal(headersOf(calls[0].init)['Content-Type'], 'application/json');
+  assert.equal(headersOf(calls[0].init)['Authorization'], undefined);
   assert.deepEqual(JSON.parse(String(calls[0].init?.body)), input);
 });
 
@@ -113,6 +152,68 @@ test('deleteProduct() uses method DELETE and resolves on 204', async (t) => {
   assert.equal(calls.length, 1);
   assert.equal(calls[0].url, 'http://localhost:8000/api/products/5/');
   assert.equal(calls[0].init?.method, 'DELETE');
+});
+
+test('login() POSTs /api/auth/login/ and returns the issued token', async (t) => {
+  const calls: FetchCall[] = [];
+  t.mock.method(globalThis, 'fetch', async (input: unknown, init?: RequestInit) => {
+    calls.push({ url: String(input), init });
+    return jsonResponse({ token: 'tok-123', username: 'alice' });
+  });
+
+  const result = await createApiClient('http://localhost:8000').login('alice', 'secret');
+  assert.deepEqual(result, { token: 'tok-123', username: 'alice' });
+  assert.equal(calls[0].url, 'http://localhost:8000/api/auth/login/');
+  assert.equal(calls[0].init?.method, 'POST');
+  assert.equal(headersOf(calls[0].init)['Content-Type'], 'application/json');
+  assert.deepEqual(JSON.parse(String(calls[0].init?.body)), { username: 'alice', password: 'secret' });
+});
+
+test('a token passed at construction is sent as Authorization: Token <key>', async (t) => {
+  const calls: FetchCall[] = [];
+  t.mock.method(globalThis, 'fetch', async (input: unknown, init?: RequestInit) => {
+    calls.push({ url: String(input), init });
+    return jsonResponse(PAGINATED_JSON);
+  });
+
+  await createApiClient('http://localhost:8000', { token: 'tok-abc' }).listProducts();
+  assert.equal(headersOf(calls[0].init)['Authorization'], 'Token tok-abc');
+});
+
+test('setToken() switches the auth header and undefined clears it', async (t) => {
+  const calls: FetchCall[] = [];
+  t.mock.method(globalThis, 'fetch', async (input: unknown, init?: RequestInit) => {
+    calls.push({ url: String(input), init });
+    return jsonResponse(PAGINATED_JSON);
+  });
+
+  const client = createApiClient('http://localhost:8000');
+  await client.listProducts();
+  assert.equal(headersOf(calls[0].init)['Authorization'], undefined);
+
+  client.setToken('tok-xyz');
+  await client.listProducts();
+  assert.equal(headersOf(calls[1].init)['Authorization'], 'Token tok-xyz');
+
+  client.setToken(undefined);
+  await client.listProducts();
+  assert.equal(headersOf(calls[2].init)['Authorization'], undefined);
+});
+
+test('authenticated writes merge Content-Type and Authorization headers', async (t) => {
+  const calls: FetchCall[] = [];
+  t.mock.method(globalThis, 'fetch', async (input: unknown, init?: RequestInit) => {
+    calls.push({ url: String(input), init });
+    return jsonResponse(PRODUCT_JSON, 201);
+  });
+
+  await createApiClient('http://localhost:8000', {
+    token: 'tok-abc',
+  }).createProduct({ name: 'Keyboard', price: '49.99', sku: 'KBD-001' });
+
+  const headers = headersOf(calls[0].init);
+  assert.equal(headers['Content-Type'], 'application/json');
+  assert.equal(headers['Authorization'], 'Token tok-abc');
 });
 
 test('getProduct() rejects with an ApiError carrying status 404 and the JSON detail', async (t) => {

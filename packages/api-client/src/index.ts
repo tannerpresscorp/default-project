@@ -4,6 +4,11 @@
  * `createApiClient` returns a typed facade over the global `fetch`, so this
  * package has no runtime dependencies and works anywhere Node's `fetch` is
  * available (Node 18+).
+ *
+ * Authenticated endpoints use DRF token auth: pass a token to
+ * `createApiClient`, set one later via {@link ApiClient.setToken}, or obtain
+ * one with {@link ApiClient.login}. When a token is set, every request carries
+ * `Authorization: Token <key>`.
  */
 
 /** Response shape of `GET /api/health/`. */
@@ -33,6 +38,39 @@ export interface Product {
   created_at: string;
   /** Last modification timestamp (ISO 8601). */
   updated_at: string;
+}
+
+/**
+ * One page of products as returned by `GET /api/products/` (the server uses
+ * page-number pagination by default).
+ */
+export interface PaginatedProducts {
+  /** Total number of matching products across all pages. */
+  count: number;
+  /** URL of the next page, or `null` on the last page. */
+  next: string | null;
+  /** URL of the previous page, or `null` on the first page. */
+  previous: string | null;
+  /** Products on this page. */
+  results: Product[];
+}
+
+/** Query parameters accepted by `GET /api/products/`. */
+export interface ListProductsParams {
+  /** Free-text search across name, sku and description. */
+  search?: string;
+  /** Page number (1-based). */
+  page?: number;
+  /** Number of results per page. */
+  page_size?: number;
+}
+
+/** Result of a successful `POST /api/auth/login/`. */
+export interface LoginResult {
+  /** Token to send as `Authorization: Token <key>`. */
+  token: string;
+  /** Username that was logged in. */
+  username: string;
 }
 
 /** Payload for creating a product. */
@@ -78,8 +116,15 @@ export class ApiError extends Error {
 export interface ApiClient {
   /** Fetch server health. Maps to `GET /api/health/`. */
   health(): Promise<HealthResponse>;
-  /** List all products. Maps to `GET /api/products/`. */
-  listProducts(): Promise<Product[]>;
+  /** Set (or clear, with `undefined`) the token sent as `Authorization: Token <key>`. */
+  setToken(token: string | undefined): void;
+  /** Exchange username + password for a token. Maps to `POST /api/auth/login/`. */
+  login(username: string, password: string): Promise<LoginResult>;
+  /**
+   * List products (paginated; searchable). Maps to `GET /api/products/`.
+   * The server caps `page_size` at 100 and defaults it to 10.
+   */
+  listProducts(params?: ListProductsParams): Promise<PaginatedProducts>;
   /** Fetch a single product by id. Maps to `GET /api/products/{id}/`. */
   getProduct(id: number): Promise<Product>;
   /** Create a product. Maps to `POST /api/products/`. */
@@ -126,17 +171,23 @@ function isRecord(value: unknown): value is Record<string, unknown> {
  * Create an API client bound to `baseUrl`.
  *
  * `baseUrl` is a server origin such as `http://localhost:8000`; a trailing
- * slash (if any) is stripped before endpoint paths are appended.
+ * slash (if any) is stripped before endpoint paths are appended. Pass an
+ * optional initial token (or call `setToken` later) to authenticate requests.
  */
-export function createApiClient(baseUrl: string): ApiClient {
+export function createApiClient(baseUrl: string, options: { token?: string } = {}): ApiClient {
   const base = baseUrl.replace(/\/+$/, '');
+  let token: string | undefined = options.token;
 
   /** Join an endpoint path (e.g. `/api/products/`) onto the base URL. */
   const buildUrl = (path: string): string => `${base}${path}`;
 
-  /** Send a request and return the JSON body of a 2xx response. */
+  /** Merge the auth header into a request's headers when a token is set. */
+  const withAuth = (headers: Record<string, string> = {}): Record<string, string> =>
+    token !== undefined ? { ...headers, Authorization: `Token ${token}` } : headers;
+
+  /** Send a request and return the parsed body of a 2xx response. */
   async function requestJson(path: string, init?: RequestInit): Promise<unknown> {
-    const response = await fetch(buildUrl(path), init);
+    const response = await fetch(buildUrl(path), { ...init, headers: withAuth(init?.headers as Record<string, string> | undefined) });
     if (!response.ok) {
       throw await errorFromResponse(response);
     }
@@ -144,16 +195,31 @@ export function createApiClient(baseUrl: string): ApiClient {
     return body;
   }
 
-  /** Headers used for requests that carry a JSON body. */
-  const jsonHeaders = { 'Content-Type': 'application/json' };
-
   return {
     async health(): Promise<HealthResponse> {
       return (await requestJson('/api/health/')) as HealthResponse;
     },
 
-    async listProducts(): Promise<Product[]> {
-      return (await requestJson('/api/products/')) as Product[];
+    setToken(next: string | undefined): void {
+      token = next;
+    },
+
+    async login(username: string, password: string): Promise<LoginResult> {
+      return (await requestJson('/api/auth/login/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password }),
+      })) as LoginResult;
+    },
+
+    async listProducts(params: ListProductsParams = {}): Promise<PaginatedProducts> {
+      const query = new URLSearchParams();
+      if (params.search !== undefined) query.set('search', params.search);
+      if (params.page !== undefined) query.set('page', String(params.page));
+      if (params.page_size !== undefined) query.set('page_size', String(params.page_size));
+      const queryString = query.toString();
+      const path = queryString.length > 0 ? `/api/products/?${queryString}` : '/api/products/';
+      return (await requestJson(path)) as PaginatedProducts;
     },
 
     async getProduct(id: number): Promise<Product> {
@@ -163,7 +229,7 @@ export function createApiClient(baseUrl: string): ApiClient {
     async createProduct(input: CreateProductInput): Promise<Product> {
       return (await requestJson('/api/products/', {
         method: 'POST',
-        headers: jsonHeaders,
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(input),
       })) as Product;
     },
@@ -171,13 +237,16 @@ export function createApiClient(baseUrl: string): ApiClient {
     async updateProduct(id: number, input: UpdateProductInput): Promise<Product> {
       return (await requestJson(`/api/products/${id}/`, {
         method: 'PATCH',
-        headers: jsonHeaders,
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(input),
       })) as Product;
     },
 
     async deleteProduct(id: number): Promise<void> {
-      const response = await fetch(buildUrl(`/api/products/${id}/`), { method: 'DELETE' });
+      const response = await fetch(buildUrl(`/api/products/${id}/`), {
+        method: 'DELETE',
+        headers: withAuth(),
+      });
       if (!response.ok) {
         throw await errorFromResponse(response);
       }
