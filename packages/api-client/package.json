@@ -1,0 +1,11 @@
+{
+  "name": "api-client",
+  "version": "0.0.0",
+  "private": true,
+  "main": "index.js",
+  "scripts": {
+    "lint": "echo \"api-client: no lint configured yet\" && exit 0",
+    "typecheck": "echo \"api-client: no typecheck configured yet\" && exit 0",
+    "test": "echo \"api-client: no tests yet\" && exit 0"
+  }
+}
