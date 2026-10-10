@@ -1,0 +1,15 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  // Project instructions are auto-loaded from the root AGENTS.md
+  // (OpenCode V2 does not load the `instructions` config field — AGENTS.md is the source of truth).
+  "commands": {
+    "verify": {
+      "description": "Run the Node workspace verify loop: lint -> typecheck -> test",
+      "template": "Run the standard verify loop for the pnpm workspace and fix any failures it surfaces: `pnpm -r lint`, then `pnpm -r typecheck`, then `pnpm -r test`. If a script is missing at the root, run it per package with `pnpm --filter <pkg> <script>`. Report exactly which commands you ran and their results."
+    },
+    "verify-server": {
+      "description": "Run Django verification: system check, migration check, tests",
+      "template": "Verify the Django server side. Create or activate the Python venv (`.venv\\Scripts\\Activate.ps1` on Windows; if PowerShell blocks the script, run `Set-ExecutionPolicy -Scope Process Bypass` first), install deps with `pip install -r requirements.txt`, then run `python manage.py check`, `python manage.py makemigrations --check --dry-run`, and `python manage.py test`. Fix any failures and report what you ran."
+    }
+  }
+}
