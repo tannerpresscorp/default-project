@@ -9,7 +9,8 @@
 - **Django:** 6.1.2 + Django REST Framework 3.18, settings module `config.settings`, `manage.py`
   at the **repo root**. Default DB is sqlite (`db.sqlite3`, gitignored). Python deps: `.venv` +
   `requirements.txt` (+ `requirements-dev.txt` for pytest). App `api` exposes `GET /api/health/`
-  and full CRUD on `Note` at `/api/notes/` (DRF ModelViewSet, JSON).
+  and full CRUD on `Product` at `/api/products/` (DRF ModelViewSet, JSON). `price` is a
+  `DecimalField`, serialized as a **string** in JSON.
 - **Node:** pnpm workspace (`pnpm-workspace.yaml` → `packages/*`). Root scripts delegate with
   `pnpm -r`. Commit `pnpm-lock.yaml`; `node_modules/` is gitignored.
 
@@ -25,8 +26,9 @@ Node / workspace — root scripts delegate across all packages:
 - Per package: `pnpm --filter api-client <script>`
 - `api-client` toolchain: TypeScript (`tsc --noEmit`), ESLint 10 flat config
   (`eslint.config.mjs`), tests via Node's built-in runner (`node --test src`, no test framework dep).
-  Client surface: `createApiClient(baseUrl)` → `health` / `listNotes` / `getNote` / `createNote` /
-  `updateNote` (PATCH) / `deleteNote`, throwing `ApiError` on non-2xx. Unit tests stub global fetch.
+  Client surface: `createApiClient(baseUrl)` → `health` / `listProducts` / `getProduct` /
+  `createProduct` / `updateProduct` (PATCH) / `deleteProduct`, throwing `ApiError` on non-2xx.
+  `Product.price` is typed as a string (mirrors DRF serialization). Unit tests stub global fetch.
 
 Django — run via the venv: `.venv\Scripts\python.exe manage.py <cmd>` on Windows, or activate
 `.venv` first (if PowerShell blocks activation, `Set-ExecutionPolicy -Scope Process Bypass`):
@@ -41,7 +43,7 @@ Expected verify order when changing code: **lint -> typecheck -> test** (Node), 
 ## Layout
 - Repo root: `manage.py`, `config/` (Django project incl. `settings.py`), `api/` (Django app:
   `views.py`, `serializers.py`, `urls.py`, `models.py`, `migrations/`, `test_health.py`,
-  `test_notes.py`), `package.json`, `pnpm-workspace.yaml`, `requirements.txt`,
+  `test_products.py`), `package.json`, `pnpm-workspace.yaml`, `requirements.txt`,
   `requirements-dev.txt`, `pytest.ini`, `opencode.jsonc`, `AGENTS.md`.
 - `packages/api-client` — TypeScript package (`src/index.ts` + `src/index.test.ts`) with real
   lint/typecheck/test scripts.

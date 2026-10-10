@@ -1,5 +1,5 @@
 /**
- * A small, dependency-free client for the companion Django notes API.
+ * A small, dependency-free client for the companion Django products API.
  *
  * `createApiClient` returns a typed facade over the global `fetch`, so this
  * package has no runtime dependencies and works anywhere Node's `fetch` is
@@ -12,37 +12,54 @@ export interface HealthResponse {
   status: 'ok';
 }
 
-/** A note as returned by the notes API. */
-export interface Note {
-  /** Unique note identifier. */
+/**
+ * A product as returned by the products API.
+ *
+ * `price` is a string: Django REST Framework serializes `DecimalField` as a
+ * string by default to preserve precision.
+ */
+export interface Product {
+  /** Unique product identifier. */
   id: number;
-  /** Note title. */
-  title: string;
-  /** Note body content. */
-  body: string;
+  /** Product name. */
+  name: string;
+  /** Product description. */
+  description: string;
+  /** Price as a decimal string (e.g. `"19.99"`). */
+  price: string;
+  /** Unique stock-keeping unit. */
+  sku: string;
   /** Creation timestamp (ISO 8601). */
   created_at: string;
   /** Last modification timestamp (ISO 8601). */
   updated_at: string;
 }
 
-/** Payload for creating a note. */
-export interface CreateNoteInput {
-  /** Note title. */
-  title: string;
-  /** Optional note body. */
-  body?: string;
+/** Payload for creating a product. */
+export interface CreateProductInput {
+  /** Product name. */
+  name: string;
+  /** Price as a decimal string (e.g. `"19.99"`). */
+  price: string;
+  /** Unique stock-keeping unit. */
+  sku: string;
+  /** Optional product description. */
+  description?: string;
 }
 
 /**
- * Payload for updating a note. Every field is optional; only the provided
+ * Payload for updating a product. Every field is optional; only the provided
  * fields are sent to the server (partial update via `PATCH`).
  */
-export interface UpdateNoteInput {
-  /** New note title. */
-  title?: string;
-  /** New note body. */
-  body?: string;
+export interface UpdateProductInput {
+  /** New product name. */
+  name?: string;
+  /** New price as a decimal string. */
+  price?: string;
+  /** New stock-keeping unit. */
+  sku?: string;
+  /** New product description. */
+  description?: string;
 }
 
 /** Error thrown when the API responds with a non-2xx status. */
@@ -61,16 +78,16 @@ export class ApiError extends Error {
 export interface ApiClient {
   /** Fetch server health. Maps to `GET /api/health/`. */
   health(): Promise<HealthResponse>;
-  /** List all notes. Maps to `GET /api/notes/`. */
-  listNotes(): Promise<Note[]>;
-  /** Fetch a single note by id. Maps to `GET /api/notes/{id}/`. */
-  getNote(id: number): Promise<Note>;
-  /** Create a note. Maps to `POST /api/notes/`. */
-  createNote(input: CreateNoteInput): Promise<Note>;
-  /** Update a note (partial update). Maps to `PATCH /api/notes/{id}/`. */
-  updateNote(id: number, input: UpdateNoteInput): Promise<Note>;
-  /** Delete a note. Maps to `DELETE /api/notes/{id}/`. */
-  deleteNote(id: number): Promise<void>;
+  /** List all products. Maps to `GET /api/products/`. */
+  listProducts(): Promise<Product[]>;
+  /** Fetch a single product by id. Maps to `GET /api/products/{id}/`. */
+  getProduct(id: number): Promise<Product>;
+  /** Create a product. Maps to `POST /api/products/`. */
+  createProduct(input: CreateProductInput): Promise<Product>;
+  /** Update a product (partial update). Maps to `PATCH /api/products/{id}/`. */
+  updateProduct(id: number, input: UpdateProductInput): Promise<Product>;
+  /** Delete a product. Maps to `DELETE /api/products/{id}/`. */
+  deleteProduct(id: number): Promise<void>;
 }
 
 /**
@@ -114,7 +131,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 export function createApiClient(baseUrl: string): ApiClient {
   const base = baseUrl.replace(/\/+$/, '');
 
-  /** Join an endpoint path (e.g. `/api/notes/`) onto the base URL. */
+  /** Join an endpoint path (e.g. `/api/products/`) onto the base URL. */
   const buildUrl = (path: string): string => `${base}${path}`;
 
   /** Send a request and return the JSON body of a 2xx response. */
@@ -135,32 +152,32 @@ export function createApiClient(baseUrl: string): ApiClient {
       return (await requestJson('/api/health/')) as HealthResponse;
     },
 
-    async listNotes(): Promise<Note[]> {
-      return (await requestJson('/api/notes/')) as Note[];
+    async listProducts(): Promise<Product[]> {
+      return (await requestJson('/api/products/')) as Product[];
     },
 
-    async getNote(id: number): Promise<Note> {
-      return (await requestJson(`/api/notes/${id}/`)) as Note;
+    async getProduct(id: number): Promise<Product> {
+      return (await requestJson(`/api/products/${id}/`)) as Product;
     },
 
-    async createNote(input: CreateNoteInput): Promise<Note> {
-      return (await requestJson('/api/notes/', {
+    async createProduct(input: CreateProductInput): Promise<Product> {
+      return (await requestJson('/api/products/', {
         method: 'POST',
         headers: jsonHeaders,
         body: JSON.stringify(input),
-      })) as Note;
+      })) as Product;
     },
 
-    async updateNote(id: number, input: UpdateNoteInput): Promise<Note> {
-      return (await requestJson(`/api/notes/${id}/`, {
+    async updateProduct(id: number, input: UpdateProductInput): Promise<Product> {
+      return (await requestJson(`/api/products/${id}/`, {
         method: 'PATCH',
         headers: jsonHeaders,
         body: JSON.stringify(input),
-      })) as Note;
+      })) as Product;
     },
 
-    async deleteNote(id: number): Promise<void> {
-      const response = await fetch(buildUrl(`/api/notes/${id}/`), { method: 'DELETE' });
+    async deleteProduct(id: number): Promise<void> {
+      const response = await fetch(buildUrl(`/api/products/${id}/`), { method: 'DELETE' });
       if (!response.ok) {
         throw await errorFromResponse(response);
       }

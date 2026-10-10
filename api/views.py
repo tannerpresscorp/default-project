@@ -1,14 +1,14 @@
 from django.http import JsonResponse
 from rest_framework import viewsets
 
-from .models import Note
-from .serializers import NoteSerializer
+from .models import Product
+from .serializers import ProductSerializer
 
 
 def health(request):
     return JsonResponse({'status': 'ok'})
 
 
-class NoteViewSet(viewsets.ModelViewSet):
-    queryset = Note.objects.all().order_by('-created_at')
-    serializer_class = NoteSerializer
+class ProductViewSet(viewsets.ModelViewSet):
+    queryset = Product.objects.all().order_by('-created_at')
+    serializer_class = ProductSerializer
