@@ -8,4 +8,5 @@ router.register('products', views.ProductViewSet, basename='product')
 
 urlpatterns = [
     path('health/', views.health),
+    path('auth/login/', views.LoginView.as_view(), name='login'),
 ] + router.urls
