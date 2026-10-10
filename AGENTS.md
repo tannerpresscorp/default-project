@@ -7,7 +7,8 @@
 ## Stack
 - **Polyglot monorepo:** Django (Python) API/server + Node packages in one repo.
 - **Django:** 6.1.2, settings module `config.settings`, `manage.py` at the **repo root**. Default
-  DB is sqlite (`db.sqlite3`, gitignored). Python deps: `.venv` + `requirements.txt`.
+  DB is sqlite (`db.sqlite3`, gitignored). Python deps: `.venv` + `requirements.txt`
+  (+ `requirements-dev.txt` for pytest). App `api` exposes `GET /api/health/`.
 - **Node:** pnpm workspace (`pnpm-workspace.yaml` → `packages/*`). Root scripts delegate with
   `pnpm -r`. Commit `pnpm-lock.yaml`; `node_modules/` is gitignored.
 
@@ -21,21 +22,27 @@
 Node / workspace — root scripts delegate across all packages:
 - `pnpm install` · `pnpm lint` (= `pnpm -r lint`) · `pnpm typecheck` · `pnpm test`
 - Per package: `pnpm --filter api-client <script>`
+- `api-client` toolchain: TypeScript (`tsc --noEmit`), ESLint 10 flat config
+  (`eslint.config.mjs`), tests via Node's built-in runner (`node --test src`, no test framework dep).
 
 Django — run via the venv: `.venv\Scripts\python.exe manage.py <cmd>` on Windows, or activate
 `.venv` first (if PowerShell blocks activation, `Set-ExecutionPolicy -Scope Process Bypass`):
-- `python -m venv .venv` · `pip install -r requirements.txt`
-- `manage.py runserver` · `check` · `test`
+- `python -m venv .venv` · `pip install -r requirements.txt` (dev: `-r requirements-dev.txt`)
+- `manage.py runserver` · `check`
+- `pytest` — primary Django test runner (config: `pytest.ini`, plugin pytest-django)
 - `manage.py makemigrations` / `migrate` — **commit migration files**
 
 Expected verify order when changing code: **lint -> typecheck -> test** (Node), plus
 `manage.py check` / `manage.py test` (Django).
 
 ## Layout
-- Repo root: `manage.py`, `config/` (Django project incl. `settings.py`), `package.json`,
-  `pnpm-workspace.yaml`, `requirements.txt`, `opencode.jsonc`, `AGENTS.md`.
-- `packages/api-client` — placeholder package; its lint/typecheck/test scripts are stubs that
-  echo and exit 0 (keeps `pnpm -r <script>` from failing until real tooling lands).
+- Repo root: `manage.py`, `config/` (Django project incl. `settings.py`), `api/` (Django app:
+  `views.py`, `urls.py`, `test_health.py`), `package.json`, `pnpm-workspace.yaml`,
+  `requirements.txt`, `requirements-dev.txt`, `pytest.ini`, `opencode.jsonc`, `AGENTS.md`.
+- `packages/api-client` — TypeScript package (`src/index.ts` + `src/index.test.ts`) with real
+  lint/typecheck/test scripts.
+- `.github/workflows/ci.yml` — CI gate: `node` job (`pnpm lint/typecheck/test`) and `django` job
+  (`manage.py check`, `pytest`). Requires a remote; inactive while the repo is local-only.
 - Gitignored: `.venv/`, `node_modules/`, `db.sqlite3`, `__pycache__/`.
 
 ## OpenCode setup
@@ -43,6 +50,6 @@ Expected verify order when changing code: **lint -> typecheck -> test** (Node), 
   tests) commands. `AGENTS.md` is auto-loaded as instructions.
 
 ## Keep current
-No CI and no real lint/typecheck/test tooling (eslint/tsc/pytest) exists yet — the package scripts
-are stubs. When real tooling and a CI gate land, record the exact commands and gate order here
-from those sources of truth.
+Tooling and CI are minimal but real (ESLint 10 + tsc + node:test for Node; pytest-django for
+Django; GitHub Actions gate). Update this file from sources of truth whenever tools, commands,
+or the CI gate change.

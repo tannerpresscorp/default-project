@@ -2,10 +2,26 @@
   "name": "api-client",
   "version": "0.0.0",
   "private": true,
-  "main": "index.js",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "import": "./src/index.ts"
+    }
+  },
   "scripts": {
-    "lint": "echo \"api-client: no lint configured yet\" && exit 0",
-    "typecheck": "echo \"api-client: no typecheck configured yet\" && exit 0",
-    "test": "echo \"api-client: no tests yet\" && exit 0"
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test src"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.0",
+    "@types/node": "^26.6.4",
+    "eslint": "^10.0.0",
+    "typescript": "^5.5.0",
+    "typescript-eslint": "^8.0.0"
+  },
+  "engines": {
+    "node": ">=24"
   }
 }
