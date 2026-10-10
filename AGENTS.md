@@ -1,8 +1,8 @@
 # AGENTS.md
 
-> **Baseline scaffold.** The repo has a working monorepo skeleton — a pnpm workspace under
-> `packages/*`, a Django project rooted at the top level, and **no CI and no real application
-> code yet**. Commands below were verified against this state (2026-10-10).
+> **Working skeleton.** pnpm workspace (`packages/*`) + Django project rooted at the top level.
+> Minimal real code (health endpoint, placeholder API client), real tooling, and a CI gate.
+> Commands below were verified on 2026-10-10.
 
 ## Stack
 - **Polyglot monorepo:** Django (Python) API/server + Node packages in one repo.
@@ -42,7 +42,7 @@ Expected verify order when changing code: **lint -> typecheck -> test** (Node), 
 - `packages/api-client` — TypeScript package (`src/index.ts` + `src/index.test.ts`) with real
   lint/typecheck/test scripts.
 - `.github/workflows/ci.yml` — CI gate: `node` job (`pnpm lint/typecheck/test`) and `django` job
-  (`manage.py check`, `pytest`). Requires a remote; inactive while the repo is local-only.
+  (`manage.py check`, `pytest`); runs on push/PR at github.com/imatthewtanner/default-project.
 - Gitignored: `.venv/`, `node_modules/`, `db.sqlite3`, `__pycache__/`.
 
 ## OpenCode setup
