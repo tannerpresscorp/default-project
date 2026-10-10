@@ -29,7 +29,8 @@ Node / workspace — root scripts delegate across all packages:
   Client surface: `createApiClient(baseUrl)` → `health` / `listProducts` / `getProduct` /
   `createProduct` / `updateProduct` (PATCH) / `deleteProduct`, throwing `ApiError` on non-2xx.
   `Product.price` is typed as a string (mirrors DRF serialization). Unit tests stub global fetch.
-- `web` toolchain: Vite 8 (rolldown) + strict TS, ESLint 10 flat config. No unit tests yet — the
+- `web` toolchain: Vite 8 (rolldown) + React 19 + strict TS, ESLint 10 flat config with
+  `eslint-plugin-react-hooks` (`configs.flat['recommended-latest']`). No unit tests yet — the
   `test` script is absent, so `pnpm -r test` skips it. `typescript` is pinned to `^5.9` because
   `typescript-eslint` 8 requires `<6.1` (do **not** bump to TS 7/native).
 - Frontend dev flow: run Django first (`manage.py runserver` on 8000), then `pnpm --filter web dev`
@@ -53,8 +54,8 @@ Expected verify order when changing code: **lint -> typecheck -> test** (Node), 
   `requirements-dev.txt`, `pytest.ini`, `opencode.jsonc`, `AGENTS.md`.
 - `packages/api-client` — TypeScript package (`src/index.ts` + `src/index.test.ts`) with real
   lint/typecheck/test scripts.
-- `packages/web` — small Vite frontend consuming `api-client` (`index.html`, `src/main.ts`,
-  `src/style.css`, `vite.config.ts` with the Django proxy). `dist/` is gitignored.
+- `packages/web` — small React frontend consuming `api-client` (`index.html`, `src/main.tsx`,
+  `src/App.tsx`, `src/style.css`, `vite.config.ts` with the Django proxy). `dist/` is gitignored.
 - `.github/workflows/ci.yml` — CI gate: `node` job (`pnpm lint/typecheck/test` +
   `pnpm --filter web build`) and `django` job (`manage.py check`, `pytest`); runs on push/PR at
   github.com/imatthewtanner/default-project.
