@@ -23,12 +23,18 @@
 ## Commands (verified)
 Node / workspace — root scripts delegate across all packages:
 - `pnpm install` · `pnpm lint` (= `pnpm -r lint`) · `pnpm typecheck` · `pnpm test`
-- Per package: `pnpm --filter api-client <script>`
+- Per package: `pnpm --filter api-client <script>` / `pnpm --filter web <script>`
 - `api-client` toolchain: TypeScript (`tsc --noEmit`), ESLint 10 flat config
   (`eslint.config.mjs`), tests via Node's built-in runner (`node --test src`, no test framework dep).
   Client surface: `createApiClient(baseUrl)` → `health` / `listProducts` / `getProduct` /
   `createProduct` / `updateProduct` (PATCH) / `deleteProduct`, throwing `ApiError` on non-2xx.
   `Product.price` is typed as a string (mirrors DRF serialization). Unit tests stub global fetch.
+- `web` toolchain: Vite 8 (rolldown) + strict TS, ESLint 10 flat config. No unit tests yet — the
+  `test` script is absent, so `pnpm -r test` skips it. `typescript` is pinned to `^5.9` because
+  `typescript-eslint` 8 requires `<6.1` (do **not** bump to TS 7/native).
+- Frontend dev flow: run Django first (`manage.py runserver` on 8000), then `pnpm --filter web dev`
+  (Vite on 5173). The browser only talks to the Vite origin — `vite.config.ts` proxies `/api/*` to
+  Django, so no CORS setup is needed and the client is used with an empty base URL.
 
 Django — run via the venv: `.venv\Scripts\python.exe manage.py <cmd>` on Windows, or activate
 `.venv` first (if PowerShell blocks activation, `Set-ExecutionPolicy -Scope Process Bypass`):
@@ -47,8 +53,11 @@ Expected verify order when changing code: **lint -> typecheck -> test** (Node), 
   `requirements-dev.txt`, `pytest.ini`, `opencode.jsonc`, `AGENTS.md`.
 - `packages/api-client` — TypeScript package (`src/index.ts` + `src/index.test.ts`) with real
   lint/typecheck/test scripts.
-- `.github/workflows/ci.yml` — CI gate: `node` job (`pnpm lint/typecheck/test`) and `django` job
-  (`manage.py check`, `pytest`); runs on push/PR at github.com/imatthewtanner/default-project.
+- `packages/web` — small Vite frontend consuming `api-client` (`index.html`, `src/main.ts`,
+  `src/style.css`, `vite.config.ts` with the Django proxy). `dist/` is gitignored.
+- `.github/workflows/ci.yml` — CI gate: `node` job (`pnpm lint/typecheck/test` +
+  `pnpm --filter web build`) and `django` job (`manage.py check`, `pytest`); runs on push/PR at
+  github.com/imatthewtanner/default-project.
 - Gitignored: `.venv/`, `node_modules/`, `db.sqlite3`, `__pycache__/`.
 
 ## OpenCode setup

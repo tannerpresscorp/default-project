@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Product Store</title>
+    <link rel="stylesheet" href="/src/style.css" />
+    <script type="module" src="/src/main.ts"></script>
+  </head>
+  <body>
+    <main>
+      <h1>Product Store</h1>
+      <p id="health">Health: checking…</p>
+
+      <form id="create-product">
+        <input name="name" placeholder="Name" required />
+        <input name="price" placeholder="Price, e.g. 19.99" required />
+        <input name="sku" placeholder="SKU" required />
+        <input name="description" placeholder="Description (optional)" />
+        <button type="submit">Create product</button>
+      </form>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Price</th>
+            <th>SKU</th>
+            <th>Created</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="products"></tbody>
+      </table>
+
+      <p id="message"></p>
+    </main>
+  </body>
+</html>
