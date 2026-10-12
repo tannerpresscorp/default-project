@@ -38,7 +38,7 @@ CI (`.github/workflows/ci.yml`) runs `pnpm lint/typecheck/test` plus `pnpm --fil
 
 - **Django API** (`config/` project, `api/` app, `manage.py` at the root):
   - DRF `ProductViewSet` at `/api/products/`.
-  - `GET /api/health/` and `POST /api/auth/login/` return a DRF token.
+  - `GET /api/health/` returns `{"status": "ok"}`. `POST /api/auth/login/` (username + password) returns `{token, username}`.
   - Auth: token auth with `IsAuthenticatedOrReadOnly`, so reads are public and writes need `Authorization: Token <key>`.
   - Lists use `SearchFilter` (`?search=`) and `api.pagination.StandardPagination`, which returns `{count, next, previous, results}`.
   - `price` is a `DecimalField` serialized as a **string**, and the TypeScript types mirror that.
@@ -51,6 +51,6 @@ CI (`.github/workflows/ci.yml`) runs `pnpm lint/typecheck/test` plus `pnpm --fil
 
 ## Gotchas
 
-- Keep `typescript` at `^5.9`. `typescript-eslint` 8 requires TypeScript below 6.1.
+- Keep TypeScript on 5.x in every package, and don't move to TS 6.1+ or 7: `typescript-eslint` 8 requires TypeScript below 6.1. Ranges differ per package (`api-client` uses `^5.5.0`, while `web` and `api-client-generated` use `^5.9.3`), so leave them as they are.
 - ESLint 10 uses flat configs (`eslint.config.mjs` in each package). Generated `src/**/*.gen.ts` files are excluded from linting.
 - For local dev, create a demo user with `createsuperuser`; none is shipped.
