@@ -43,7 +43,7 @@ CI (`.github/workflows/ci.yml`) runs `pnpm lint/typecheck/test` plus `pnpm --fil
   - Lists use `SearchFilter` (`?search=`) and `api.pagination.StandardPagination`, which returns `{count, next, previous, results}`.
   - `price` is a `DecimalField` serialized as a **string**, and the TypeScript types mirror that.
 - **OpenAPI contract:** `drf-spectacular` serves `/api/schema/` and `/api/docs/`. A snapshot is committed as `openapi.json` at the repo root. When you change server-side schemas, regenerate it in this order:
-  1. `python manage.py spectacular --file openapi.json --format openapi-json`
+  1. `.venv/bin/python manage.py spectacular --file openapi.json --format openapi-json` (Windows: `.venv\Scripts\python.exe`)
   2. `pnpm --filter api-client-generated generate`
 - **`packages/api-client`:** a **hand-written** TypeScript client (`createApiClient(baseUrl, {token?})`, throws `ApiError`). Its tests stub global `fetch` and use `node --test`. This is the client `web` actually consumes.
 - **`packages/api-client-generated`:** `@hey-api/openapi-ts` output in `src/`. Generation **wipes `src/`**, so the hand-written entry `index.ts` sits at the package root. It has no tests, and nothing in the workspace imports it yet. Keep it in sync with `openapi.json`, but update `api-client` by hand when the API changes.
