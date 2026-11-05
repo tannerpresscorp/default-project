@@ -32,7 +32,7 @@ python -m venv .venv && .venv/bin/pip install -r requirements-dev.txt   # Window
 
 `AGENTS.md` and `opencode.jsonc` give Windows paths (`.venv\Scripts\python.exe`). On Linux or macOS, use `.venv/bin/python`.
 
-CI (`.github/workflows/ci.yml`) runs `pnpm lint/typecheck/test` plus `pnpm --filter web build` in one job, and `manage.py check` plus `pytest` in another.
+CI (`.github/workflows/ci.yml`) runs `pnpm lint/typecheck/test` plus `pnpm --filter web build` in one job, `manage.py check` plus `pytest` in another, and Python 3.12 platform checks with PostgreSQL isolation tests in a third.
 
 ## Architecture
 
@@ -48,6 +48,7 @@ CI (`.github/workflows/ci.yml`) runs `pnpm lint/typecheck/test` plus `pnpm --fil
 - **`packages/api-client`:** a **hand-written** TypeScript client (`createApiClient(baseUrl, {token?})`, throws `ApiError`). Its tests stub global `fetch` and use `node --test`. This is the client `web` actually consumes.
 - **`packages/api-client-generated`:** `@hey-api/openapi-ts` output in `src/`. Generation **wipes `src/`**, so the hand-written entry `index.ts` sits at the package root. It has no tests, and nothing in the workspace imports it yet. Keep it in sync with `openapi.json`, but update `api-client` by hand when the API changes.
 - **`packages/web`:** Vite + React 19. `vite.config.ts` proxies `/api` to Django on `127.0.0.1:8000`, so the client uses an empty base URL and no CORS setup is needed. The login token lives only in React state.
+- **Agent platform foundation (separate from Django):** `apps/api` is a FastAPI control plane with Python 3.12 dependencies in `requirements-platform*.txt` and its own `.venv-platform`. Shared packages under `packages/{auth,config,domain,observability,persistence,schemas}` own identity, settings and async PostgreSQL/Alembic persistence with tenant RLS. Other `apps/` and `packages/` platform directories are later-phase placeholders. See `docs/architecture/` and run platform tests with `pytest -c pyproject.toml tests/unit`.
 
 ## Gotchas
 
