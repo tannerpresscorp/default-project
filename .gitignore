@@ -6,6 +6,7 @@ coverage/
 
 # Python
 .venv/
+.venv-platform/
 __pycache__/
 *.py[cod]
 *.egg-info/

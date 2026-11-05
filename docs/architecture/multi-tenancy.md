@@ -1,0 +1,7 @@
+# Tenant isolation
+
+The trusted issuer signs a tenant UUID claim; the API validates it and puts the principal in request-local context. The authenticated router ignores client-supplied tenant headers. Repository construction requires a tenant UUID and rejects tenant IDs supplied in create values. Database work must run inside `tenant_transaction`, which sets `app.tenant_id` transaction-locally so pooled connections do not retain tenant context. Missing context yields no visible rows and rejects writes.
+
+The five initial tables use forced PostgreSQL RLS with both read and write checks. Tenant-aware composite foreign keys prevent cross-tenant agent/version/conversation references. Agent versions reject updates and deletes through a database trigger; creating a new version is the only supported change. Their immutable identifiers are references, not evidence that the referenced prompt, policies or code are immutable or available.
+
+Use separate, least-privileged migration and runtime roles; provision production grants and monitor role/policy drift. RLS cannot guard against superusers, BYPASSRLS, malicious use of the runtime role to change the tenant variable, or privileged table alterations. Tenant onboarding, audit events, object storage prefixes, vector isolation and resource-level policy checks remain future work. Hard deletion and retention of immutable versions require a separately designed privileged process.

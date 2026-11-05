@@ -1,0 +1,18 @@
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+include = ["apps/**/*.py", "packages/auth/**/*.py", "packages/config/**/*.py", "packages/domain/**/*.py", "packages/observability/**/*.py", "packages/persistence/**/*.py", "packages/schemas/**/*.py", "tests/**/*.py"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
+
+[tool.mypy]
+python_version = "3.12"
+explicit_package_bases = true
+files = ["apps/api", "packages/auth", "packages/config", "packages/domain", "packages/observability", "packages/persistence", "packages/schemas"]
+ignore_missing_imports = true
+exclude = ["packages/persistence/migrations/"]

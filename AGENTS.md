@@ -32,6 +32,24 @@
   the venv exists, is activated, and `pip install -r requirements.txt` has run.
 - pnpm addresses packages by **name via `pnpm --filter <pkg>`, not by directory path.**
 
+## Agent platform foundation (separate from Django)
+- `apps/api` is an additive FastAPI control-plane foundation; it does not replace the product API.
+  Python 3.12 dependencies are in `requirements-platform.txt` and `requirements-platform-dev.txt`;
+  use a separate `.venv-platform` so the existing Django environment remains intact.
+- `packages/{auth,config,domain,observability,persistence,schemas}` are shared Python platform
+  packages. PostgreSQL and Alembic own platform persistence, not Django migrations. Tenant claims
+  must be verified and DB work must use transaction-local RLS context with a non-owner,
+  non-superuser, non-BYPASSRLS runtime role. See `docs/architecture/multi-tenancy.md`.
+- Local setup and explicit commands (including isolated integration-test database migration) are
+  in `docs/architecture/development.md`. The original Django pytest config targets `api/`; run
+  platform tests with `pytest -c pyproject.toml tests/unit` and `tests/integration` separately.
+- Platform checks: `python -m ruff check apps packages tests`, `python -m ruff format --check
+  apps packages tests`, `python -m mypy`, and the platform pytest commands. Do not call placeholder
+  gateways, runtime, workflows, retrieval or sandbox implemented; they are later phases.
+- CI also has a Python 3.12 platform job that runs these checks and PostgreSQL isolation tests
+  against a dedicated test database. Later-phase container, evaluation and deployment gates are
+  not implemented yet.
+
 ## Commands (verified)
 Node / workspace — root scripts delegate across all packages:
 - `pnpm install` · `pnpm lint` (= `pnpm -r lint`) · `pnpm typecheck` · `pnpm test`
@@ -87,7 +105,8 @@ Expected verify order when changing code: **lint -> typecheck -> test** (Node), 
 - `packages/web` — React frontend consuming `api-client` (`index.html`, `src/main.tsx`,
   `src/App.tsx`, `src/style.css`, `vite.config.ts` with the Django proxy). `dist/` is gitignored.
 - `.github/workflows/ci.yml` — CI gate: `node` job (`pnpm lint/typecheck/test` +
-  `pnpm --filter web build`) and `django` job (`manage.py check`, `pytest`); runs on push/PR at
+  `pnpm --filter web build`), `django` job (`manage.py check`, `pytest`) and `platform` job
+  (Ruff, mypy, unit and PostgreSQL integration tests); runs on push/PR at
   github.com/imatthewtanner/default-project.
 - Gitignored: `.venv/`, `node_modules/`, `db.sqlite3`, `__pycache__/`, `web/dist/` + build output.
 

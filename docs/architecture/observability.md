@@ -1,0 +1,5 @@
+# Observability
+
+The platform logger emits JSON and offers recursive sensitive-key redaction plus configurable PII-key hooks; callers must not log raw bodies or credentials. Free-form text cannot be reliably scrubbed, and third-party/server logs are not automatically covered. HTTP tracing uses an app-local OpenTelemetry tracer provider. Set `PLATFORM_OTEL_TRACES_ENDPOINT` to the full OTLP/HTTP traces endpoint to export; without it spans are not exported. HTTP request/response header capture is disabled even if capture environment variables are set, and query strings are stripped from exported HTTP spans. The instrumentation initially constructs span attributes before its sanitizing hook; do not put secrets in URLs or install processors that inspect attributes on span start.
+
+This foundation does not yet expose Prometheus metrics, instrument database/model/tool/workflow calls, establish correlation IDs, or provide a collector. Future metric labels must not include tenant, run, conversation or invocation IDs; high-cardinality context belongs in traces or protected logs. Audit records will require a separate queryable store.

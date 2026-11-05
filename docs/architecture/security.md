@@ -1,0 +1,9 @@
+# Security
+
+Phase 1 validates RS256 bearer-token signatures against a configured HTTPS JWKS endpoint, and checks issuer, audience, expiry, subject and a signed UUID tenant claim. The identity provider is trusted to establish subject-to-tenant membership; no independent membership store, revocation checks, scopes, role-based permissions, service identity or OIDC login flow is implemented. JWKS is fetched on each authenticated request with a three-second timeout; provider outages deny access. Configure ingress rate limiting and assess JWKS caching/rotation before production.
+
+Every `/v1` route must use the authenticated router and derive tenant context from its principal, not a request field. The current endpoint only reports identity; resource-level authorization and tool policies are future work. Deny by default when identity configuration is absent.
+
+Database RLS and tenant-scoped composite foreign keys add a second isolation layer. Runtime credentials must not be superuser, BYPASSRLS, table owner, or a member of an owning role. Migration credentials are separate and never available to the application. See [multi-tenancy](multi-tenancy.md). Runtime connections can set the tenant session variable, so RLS does **not** contain a compromised process or arbitrary SQL execution; avoid SQL injection, limit database privileges and use stronger isolation if the threat model requires it. Readiness checks role and expected RLS metadata, but cannot prove policy semantics or prevent later privilege changes.
+
+No model or tool executions exist yet. Future model output and tool calls must be treated as hostile and authorized independently; secrets must never be placed in prompts. Sandbox isolation, network controls, audit trail, KMS integration and comprehensive security testing remain outstanding. Existing Django development settings are not production-safe.
