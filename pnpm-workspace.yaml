@@ -1,2 +1,8 @@
 packages:
   - packages/*
+
+overrides:
+  # GHSA-5p4m-2wfm-xmqj: parser 1.4.4 pins the vulnerable 4.2.0 release.
+  '@hey-api/json-schema-ref-parser@1.4.4>js-yaml': 4.3.2
+  # GHSA-g3hv-75wg-m249: the affected minimatch 10 line has no patched release.
+  'minimatch@^10.0.0': 11.0.4
