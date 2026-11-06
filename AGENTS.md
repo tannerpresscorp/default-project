@@ -25,6 +25,10 @@
   via `@extend_schema` (`LoginRequestSerializer` / `LoginResponseSerializer`).
 - **Node:** pnpm workspace (`pnpm-workspace.yaml` → `packages/*`). Root scripts delegate with
   `pnpm -r`. Commit `pnpm-lock.yaml`; `node_modules/` is gitignored.
+- **Error monitoring:** Sentry is optional in all three apps and inert without a DSN —
+  `PLATFORM_SENTRY_DSN` (FastAPI), `SENTRY_DSN` (Django), `VITE_SENTRY_DSN` (web). Each app
+  disables PII, request bodies, cookies and query strings and redacts credential headers before
+  export. Env templates: `.env.example` and `packages/web/.env.example`.
 
 ## Two independent dependency systems
 - pnpm does **not** install Python deps and vice versa — sync both sides on dependency changes.

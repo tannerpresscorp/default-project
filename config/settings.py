@@ -10,6 +10,7 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/6.1/ref/settings/
 """
 
+import os
 from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -149,3 +150,13 @@ MAILERS = {
         'BACKEND': 'django.core.mail.backends.console.EmailBackend',
     },
 }
+
+
+# Error monitoring
+# https://docs.sentry.io/platforms/python/integrations/django/
+# Inert unless SENTRY_DSN is set. See config/sentry.py for scrubbing rules.
+
+from config.sentry import init_sentry  # noqa: E402
+
+SENTRY_DSN = os.environ.get('SENTRY_DSN')
+init_sentry(SENTRY_DSN)

@@ -20,6 +20,7 @@ from packages.auth.context import authenticated_principal
 from packages.auth.identity import IdentityVerifier, Principal, Verifier
 from packages.config.settings import Settings
 from packages.observability.logging import configure_logging
+from packages.observability.sentry import capture_exception, init_sentry
 
 
 def sanitize_http_span(span: Span, _scope: dict) -> None:
@@ -43,6 +44,7 @@ def create_app(
 ) -> FastAPI:
     settings = settings or Settings()
     logger = configure_logging()
+    init_sentry(settings)
     own_provider = tracer_provider is None
     if settings.otel_enabled and tracer_provider is None:
         tracer_provider = TracerProvider(
@@ -101,7 +103,8 @@ def create_app(
     async def unexpected_error(request: Request, call_next):
         try:
             return await call_next(request)
-        except Exception:
+        except Exception as exc:
+            capture_exception(exc)
             logger.error("unexpected API failure")
             return JSONResponse(
                 status_code=500,

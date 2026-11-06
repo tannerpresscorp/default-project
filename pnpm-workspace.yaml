@@ -1,6 +1,15 @@
 packages:
   - packages/*
 
+minimumReleaseAgeExclude:
+  - '@sentry/browser-utils@11.11.0'
+  - '@sentry/browser@11.11.0'
+  - '@sentry/core@11.11.0'
+  - '@sentry/feedback@11.11.0'
+  - '@sentry/react@11.11.0'
+  - '@sentry/replay-canvas@11.11.0'
+  - '@sentry/replay@11.11.0'
+
 overrides:
   # GHSA-5p4m-2wfm-xmqj: parser 1.4.4 pins the vulnerable 4.2.0 release.
   '@hey-api/json-schema-ref-parser@1.4.4>js-yaml': 4.3.2

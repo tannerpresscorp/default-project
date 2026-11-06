@@ -1,4 +1,4 @@
-from pydantic import field_validator
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -12,6 +12,16 @@ class Settings(BaseSettings):
     oidc_tenant_claim: str = "tenant_id"
     otel_enabled: bool = True
     otel_traces_endpoint: str | None = None
+    sentry_dsn: str | None = None
+    sentry_environment: str = "development"
+    sentry_traces_sample_rate: float = Field(default=0.0, ge=0, le=1)
+
+    @field_validator("sentry_dsn")
+    @classmethod
+    def sentry_dsn_must_use_https(cls, value: str | None) -> str | None:
+        if value and not value.startswith("https://"):
+            raise ValueError("sentry_dsn must use https")
+        return value
 
     @field_validator("database_url")
     @classmethod

@@ -16,6 +16,8 @@ Local database passwords are intentionally public and **only** for this loopback
 
 Health: `GET http://127.0.0.1:8001/health/live`; readiness: `/health/ready`; OpenAPI: `/openapi.json`; authenticated identity: `GET /v1/session` with a bearer token. No tenant header is trusted.
 
+Error monitoring is optional: export `PLATFORM_SENTRY_DSN` (FastAPI), `SENTRY_DSN` (Django) and set `VITE_SENTRY_DSN` in `packages/web/.env.local` (React). Without them the SDKs stay inert. The Python apps read the process environment; they do not load `.env` files.
+
 ```sh
 .venv-platform/bin/python -m ruff check apps packages tests
 .venv-platform/bin/python -m ruff format --check apps packages tests
