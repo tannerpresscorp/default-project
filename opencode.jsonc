@@ -4,6 +4,13 @@
     "i-matthew-tanner": {
       "type": "remote",
       "url": "https://mcp.matthewtanner.app/mcp"
+    },
+    "sentry": {
+      "type": "local",
+      "command": ["npx", "--yes", "@sentry/mcp-server@latest", "--host", "https://contoso.sentry.io"],
+      "environment": {
+        "SENTRY_ACCESS_TOKEN": "{env:COPILOT_MCP_SENTRY_ACCESS_TOKEN}"
+      }
     }
   },
   // Project instructions are auto-loaded from the root AGENTS.md

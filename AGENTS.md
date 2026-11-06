@@ -116,7 +116,9 @@ Expected verify order when changing code: **lint -> typecheck -> test** (Node), 
 
 ## OpenCode setup
 - `opencode.jsonc` defines `/verify` (Node verify loop) and `/verify-server` (Django checks +
-  tests) commands. `AGENTS.md` is auto-loaded as instructions.
+  tests) commands and configures the Sentry MCP server. Set
+  `COPILOT_MCP_SENTRY_ACCESS_TOKEN` in the OpenCode process environment; `AGENTS.md` is
+  auto-loaded as instructions.
 - This repo is **private**. For issues/PRs the `gh` CLI is the reliable path (`GH_TOKEN`, a
   classic PAT with `repo` scope). The GitHub MCP server (`MCP_DOCKER` > `github-official`) takes
   its token from the Docker MCP secret `github.personal_access_token` (`docker mcp secret ls`),
