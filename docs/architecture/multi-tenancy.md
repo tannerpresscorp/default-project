@@ -4,4 +4,6 @@ The trusted issuer signs a tenant UUID claim; the API validates it and puts the 
 
 The five initial tables use forced PostgreSQL RLS with both read and write checks. Tenant-aware composite foreign keys prevent cross-tenant agent/version/conversation references. Agent versions reject updates and deletes through a database trigger; creating a new version is the only supported change. Their immutable identifiers are references, not evidence that the referenced prompt, policies or code are immutable or available.
 
+Agent-run transitions add optimistic concurrency to tenant isolation: an update requires the caller's tenant and the expected current status, cross-tenant identifiers resolve as not found, and a trigger rejects status changes outside the domain state machine even when issued as direct SQL. See [agent runtime](agent-runtime.md).
+
 Use separate, least-privileged migration and runtime roles; provision production grants and monitor role/policy drift. RLS cannot guard against superusers, BYPASSRLS, malicious use of the runtime role to change the tenant variable, or privileged table alterations. Tenant onboarding, audit events, object storage prefixes, vector isolation and resource-level policy checks remain future work. Hard deletion and retention of immutable versions require a separately designed privileged process.

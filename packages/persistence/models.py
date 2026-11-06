@@ -2,15 +2,22 @@ from datetime import datetime
 from uuid import UUID, uuid4
 
 from sqlalchemy import (
+    CheckConstraint,
     DateTime,
     ForeignKey,
     ForeignKeyConstraint,
+    Index,
     String,
     UniqueConstraint,
     Uuid,
     func,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+
+from packages.domain.runs import TERMINAL_STATUSES, RunStatus
+
+RUN_STATUS_SQL = ", ".join(f"'{status.value}'" for status in RunStatus)
+TERMINAL_STATUS_SQL = ", ".join(sorted(f"'{status.value}'" for status in TERMINAL_STATUSES))
 
 
 class Base(DeclarativeBase):
@@ -72,6 +79,12 @@ class AgentRun(Base):
         ForeignKeyConstraint(
             ["tenant_id", "conversation_id"], ["conversations.tenant_id", "conversations.id"]
         ),
+        CheckConstraint(f"status IN ({RUN_STATUS_SQL})", name="ck_agent_runs_status"),
+        CheckConstraint(
+            f"(status IN ({TERMINAL_STATUS_SQL})) = (finished_at IS NOT NULL)",
+            name="ck_agent_runs_terminal_finished_at",
+        ),
+        Index("ix_agent_runs_tenant_id_status", "tenant_id", "status"),
     )
     id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
     tenant_id: Mapped[UUID] = mapped_column(Uuid, nullable=False, index=True)
@@ -80,3 +93,8 @@ class AgentRun(Base):
     conversation_id: Mapped[UUID | None] = mapped_column(Uuid, nullable=True)
     status: Mapped[str] = mapped_column(String(32), nullable=False, server_default="PENDING")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
