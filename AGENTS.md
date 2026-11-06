@@ -40,16 +40,19 @@
 - `apps/api` is an additive FastAPI control-plane foundation; it does not replace the product API.
   Python 3.12 dependencies are in `requirements-platform.txt` and `requirements-platform-dev.txt`;
   use a separate `.venv-platform` so the existing Django environment remains intact.
-- `packages/{auth,config,domain,observability,persistence,schemas}` are shared Python platform
-  packages. PostgreSQL and Alembic own platform persistence, not Django migrations. Tenant claims
-  must be verified and DB work must use transaction-local RLS context with a non-owner,
+- `packages/{auth,config,domain,observability,persistence,policies,schemas}` are shared Python
+  platform packages. PostgreSQL and Alembic own platform persistence, not Django migrations. Tenant
+  claims must be verified and DB work must use transaction-local RLS context with a non-owner,
   non-superuser, non-BYPASSRLS runtime role. See `docs/architecture/multi-tenancy.md`.
+- `apps/tool_gateway` is an in-process foundation: static registry, tenant allowlists, JSON Schema
+  validation, approval denial and timeouts, with no MCP, network, audit or real execution yet. Do
+  not call the model gateway, runtime, workflows, retrieval or sandbox implemented; they remain
+  later phases.
 - Local setup and explicit commands (including isolated integration-test database migration) are
   in `docs/architecture/development.md`. The original Django pytest config targets `api/`; run
   platform tests with `pytest -c pyproject.toml tests/unit` and `tests/integration` separately.
 - Platform checks: `python -m ruff check apps packages tests`, `python -m ruff format --check
-  apps packages tests`, `python -m mypy`, and the platform pytest commands. Do not call placeholder
-  gateways, runtime, workflows, retrieval or sandbox implemented; they are later phases.
+  apps packages tests`, `python -m mypy`, and the platform pytest commands.
 - CI also has a Python 3.12 platform job that runs these checks and PostgreSQL isolation tests
   against a dedicated test database. Later-phase container, evaluation and deployment gates are
   not implemented yet.

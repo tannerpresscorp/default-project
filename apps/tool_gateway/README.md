@@ -1,3 +1,3 @@
 # Tool gateway
 
-Reserved for Phase 3. No MCP connectivity is implemented yet.
+In-process governed tool discovery and invocation. No MCP connectivity or network adapters are implemented yet.
