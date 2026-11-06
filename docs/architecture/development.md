@@ -32,6 +32,19 @@ export PLATFORM_TEST_DATABASE_URL='postgresql+asyncpg://platform_app:local_app_o
 
 The integration tests require the dedicated database name `platform_test` and a non-superuser, non-BYPASSRLS application role. Without its URL pytest reports a skip, not a passing integration verification. They create unique rows and do not clean them up. Run migrations using the migration URL for the target database before testing. `make dev`, `test`, `lint`, `typecheck`, `migrate`, and `integration-test` are equivalent on Unix, with the same environment requirements. Redis is not exercised in Phase 1. Compose data is persistent and is not removed by these commands.
 
+### Native PostgreSQL instead of Docker
+
+A local PostgreSQL service can replace the Compose database; it uses the default port `5432` rather than `55432`. Create the same development roles and databases, then run the grants from `infra/local/postgres-init.sql` against both databases:
+
+```sql
+CREATE ROLE platform_migrator LOGIN PASSWORD 'local_migrator_only' NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS;
+CREATE ROLE platform_app LOGIN PASSWORD 'local_app_only' NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS;
+CREATE DATABASE platform OWNER platform_migrator;
+CREATE DATABASE platform_test OWNER platform_migrator;
+```
+
+Point `PLATFORM_DATABASE_URL`, `PLATFORM_MIGRATION_DATABASE_URL` and `PLATFORM_TEST_DATABASE_URL` at `127.0.0.1:5432` and run `alembic upgrade head` for both databases. Keep the migration role out of application traffic and keep `platform_app` non-owner and non-BYPASSRLS.
+
 ## PowerShell
 
 Use `py -0p` to select a Python 3.12 installation. For example, with the Astral CPython 3.12.16 installation shown by the launcher:
