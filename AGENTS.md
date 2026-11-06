@@ -111,13 +111,14 @@ Expected verify order when changing code: **lint -> typecheck -> test** (Node), 
 - `.github/workflows/ci.yml` — CI gate: `node` job (`pnpm lint/typecheck/test` +
   `pnpm --filter web build`), `django` job (`manage.py check`, `pytest`) and `platform` job
   (Ruff, mypy, unit and PostgreSQL integration tests); runs on push/PR at
-  github.com/imatthewtanner/default-project.
+  github.com/tannerpresscorp/default-project.
 - Gitignored: `.venv/`, `node_modules/`, `db.sqlite3`, `__pycache__/`, `web/dist/` + build output.
 
 ## OpenCode setup
 - `opencode.jsonc` defines `/verify` (Node verify loop) and `/verify-server` (Django checks +
   tests) commands. `AGENTS.md` is auto-loaded as instructions.
-- This repo is **private**. For issues/PRs the `gh` CLI is the reliable path (`GH_TOKEN`, a
+- This repo is public at `github.com/tannerpresscorp/default-project` (transferred from the
+  `imatthewtanner` account). For issues/PRs the `gh` CLI is the reliable path (`GH_TOKEN`, a
   classic PAT with `repo` scope). The GitHub MCP server (`MCP_DOCKER` > `github-official`) takes
   its token from the Docker MCP secret `github.personal_access_token` (`docker mcp secret ls`),
   but an authorized OAuth grant (`docker mcp oauth`) takes precedence over that secret. The
