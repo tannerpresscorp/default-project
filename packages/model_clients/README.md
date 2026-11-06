@@ -1,3 +1,3 @@
 # Model clients
 
-Reserved for provider adapters in Phase 2.
+Provider-neutral model contracts and the deterministic offline provider. Real vendor adapters are not implemented.

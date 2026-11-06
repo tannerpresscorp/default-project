@@ -10,6 +10,7 @@ include = [
     "packages/auth/**/*.py",
     "packages/config/**/*.py",
     "packages/domain/**/*.py",
+    "packages/model_clients/**/*.py",
     "packages/observability/**/*.py",
     "packages/persistence/**/*.py",
     "packages/policies/**/*.py",
@@ -25,10 +26,12 @@ python_version = "3.12"
 explicit_package_bases = true
 files = [
     "apps/api",
+    "apps/model_gateway",
     "apps/tool_gateway",
     "packages/auth",
     "packages/config",
     "packages/domain",
+    "packages/model_clients",
     "packages/observability",
     "packages/persistence",
     "packages/policies",

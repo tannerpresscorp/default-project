@@ -40,14 +40,17 @@
 - `apps/api` is an additive FastAPI control-plane foundation; it does not replace the product API.
   Python 3.12 dependencies are in `requirements-platform.txt` and `requirements-platform-dev.txt`;
   use a separate `.venv-platform` so the existing Django environment remains intact.
-- `packages/{auth,config,domain,observability,persistence,policies,schemas}` are shared Python
-  platform packages. PostgreSQL and Alembic own platform persistence, not Django migrations. Tenant
-  claims must be verified and DB work must use transaction-local RLS context with a non-owner,
-  non-superuser, non-BYPASSRLS runtime role. See `docs/architecture/multi-tenancy.md`.
+- `packages/{auth,config,domain,model_clients,observability,persistence,policies,schemas}` are
+  shared Python platform packages. PostgreSQL and Alembic own platform persistence, not Django
+  migrations. Tenant claims must be verified and DB work must use transaction-local RLS context
+  with a non-owner, non-superuser, non-BYPASSRLS runtime role. See
+  `docs/architecture/multi-tenancy.md`.
+- `apps/model_gateway` is an in-process foundation: static logical routing, bounded requests, one
+  timeout, normalized errors and a deterministic offline provider, with no vendor calls, retries,
+  quotas or accounting yet.
 - `apps/tool_gateway` is an in-process foundation: static registry, tenant allowlists, JSON Schema
-  validation, approval denial and timeouts, with no MCP, network, audit or real execution yet. Do
-  not call the model gateway, runtime, workflows, retrieval or sandbox implemented; they remain
-  later phases.
+  validation, approval denial and timeouts, with no MCP, network, audit or real execution yet.
+- Do not call the runtime, workflows, retrieval or sandbox implemented; they remain later phases.
 - Local setup and explicit commands (including isolated integration-test database migration) are
   in `docs/architecture/development.md`. The original Django pytest config targets `api/`; run
   platform tests with `pytest -c pyproject.toml tests/unit` and `tests/integration` separately.

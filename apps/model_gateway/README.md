@@ -1,3 +1,3 @@
 # Model gateway
 
-Reserved for Phase 2. No provider integration is implemented yet.
+In-process logical model routing with bounded requests, timeouts and normalized errors. Only the deterministic offline provider is wired; no vendor calls or credentials.
