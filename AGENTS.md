@@ -111,7 +111,8 @@ Expected verify order when changing code: **lint -> typecheck -> test** (Node), 
 - `.github/workflows/ci.yml` — CI gate: `node` job (`pnpm lint/typecheck/test` +
   `pnpm --filter web build`), `django` job (`manage.py check`, `pytest`) and `platform` job
   (Ruff, mypy, unit and PostgreSQL integration tests); runs on push/PR at
-  github.com/tannerpresscorp/default-project.
+  github.com/tannerpresscorp/default-project. The organization blocks third-party Actions, so
+  CI installs pnpm with `npm install -g pnpm@12.8.1`; `pnpm/action-setup` fails at startup.
 - Gitignored: `.venv/`, `node_modules/`, `db.sqlite3`, `__pycache__/`, `web/dist/` + build output.
 
 ## OpenCode setup

@@ -55,4 +55,5 @@ CI (`.github/workflows/ci.yml`) runs `pnpm lint/typecheck/test` plus `pnpm --fil
 
 - Keep TypeScript on 5.x in every package, and don't move to TS 6.1+ or 7: `typescript-eslint` 8 requires TypeScript below 6.1. Ranges differ per package (`api-client` uses `^5.5.0`, while `web` and `api-client-generated` use `^5.9.3`), so leave them as they are.
 - ESLint 10 uses flat configs (`eslint.config.mjs` in each package). Generated `src/**/*.gen.ts` files are excluded from linting.
+- The `tannerpresscorp` organization blocks third-party GitHub Actions. Keep workflows on GitHub-owned actions or plain `run` steps; pnpm is installed with `npm install -g pnpm@12.8.1` because `pnpm/action-setup` causes a startup failure.
 - For local dev, create a demo user with `createsuperuser`; none is shipped.
