@@ -2,7 +2,9 @@
 
 The platform logger emits JSON and offers recursive sensitive-key redaction plus configurable PII-key hooks; callers must not log raw bodies or credentials. Free-form text cannot be reliably scrubbed, and third-party/server logs are not automatically covered. HTTP tracing uses an app-local OpenTelemetry tracer provider. Set `PLATFORM_OTEL_TRACES_ENDPOINT` to the full OTLP/HTTP traces endpoint to export; without it spans are not exported. HTTP request/response header capture is disabled even if capture environment variables are set, and query strings are stripped from exported HTTP spans. The instrumentation initially constructs span attributes before its sanitizing hook; do not put secrets in URLs or install processors that inspect attributes on span start.
 
-This foundation does not yet expose Prometheus metrics, instrument database/model/tool/workflow calls, establish correlation IDs, or provide a collector. Future metric labels must not include tenant, run, conversation or invocation IDs; high-cardinality context belongs in traces or protected logs. Audit records will require a separate queryable store.
+The API exposes `GET /metrics` in the Prometheus text format from an in-process counter registry. Counters are bounded: labels are limited to method, matched route template and status, and the registry drops new series past a fixed cap. They contain no tenant, run, conversation or invocation identifiers and reset on restart, so they are not a substitute for a collector or durable dashboards. Counters cover HTTP requests plus run submissions, cancellations, budget rejections, retrieval ingestions and searches.
+
+There is no Prometheus server, collector, persistence or alerting in this repository, and database/model/tool/workflow internals are not instrumented yet. Future metric labels must remain bounded; high-cardinality context belongs in traces or protected logs. Audit records require a separate queryable store. Deploy `/metrics` behind private ingress if request volumes are sensitive.
 
 ## Sentry
 

@@ -4,6 +4,7 @@ These tests are skipped unless TEMPORAL_CLI_PATH points at the Temporal CLI.
 The dev server is started per test so no shared external service is required.
 """
 
+import asyncio
 import os
 from pathlib import Path
 from uuid import UUID, uuid4
@@ -22,9 +23,32 @@ from apps.workflow_worker.contracts import RunWorkflowInput, ToolApprovalRequest
 from apps.workflow_worker.workflows import AgentRunWorkflow, ToolApprovalWorkflow
 from packages.domain.runs import RunStatus
 from packages.domain.tools import ApprovalStatus
+from packages.model_clients.contracts import (
+    ModelProvider,
+    ModelRequest,
+    ModelResponse,
+    TokenUsage,
+)
 from packages.model_clients.fake import DeterministicModelProvider
 from packages.persistence.database import tenant_transaction
 from packages.persistence.repository import AgentRunRepository
+from packages.usage.ledger import UsageLedger
+
+
+class SlowProvider(ModelProvider):
+    """Stays inside one activity long enough for a cancellation test."""
+
+    name = "slow"
+
+    def __init__(self, delay_seconds: float = 30.0) -> None:
+        self._delay_seconds = delay_seconds
+
+    async def generate(self, model: str, request: ModelRequest) -> ModelResponse:
+        await asyncio.sleep(self._delay_seconds)
+        return ModelResponse(
+            content="finished",
+            usage=TokenUsage(input_tokens=1, output_tokens=1),
+        )
 
 
 @pytest.fixture
@@ -88,7 +112,7 @@ async def test_run_workflow_completes_and_persists_state(database_url, temporal_
     queue = f"runs-{uuid4()}"
     try:
         run_id = await seed_run(engine, tenant_id)
-        activities = RunActivities(engine, gateway_for_models(("chat",)))
+        activities = RunActivities(engine, gateway_for_models(("chat",)), UsageLedger(engine))
         async with await start_environment(temporal_cli_path) as env:
             async with Worker(
                 env.client,
@@ -99,6 +123,7 @@ async def test_run_workflow_completes_and_persists_state(database_url, temporal_
                     activities.generate,
                     activities.complete,
                     activities.fail,
+                    activities.cancel,
                 ],
             ):
                 result = await env.client.execute_workflow(
@@ -118,6 +143,26 @@ async def test_run_workflow_completes_and_persists_state(database_url, temporal_
         assert result.input_tokens > 0
         assert result.output_tokens > 0
         assert await run_status(engine, tenant_id, run_id) == RunStatus.SUCCEEDED.value
+
+        async with tenant_transaction(engine, tenant_id) as conn:
+            usage = (
+                (
+                    await conn.execute(
+                        text(
+                            "SELECT logical_model, input_tokens, output_tokens, run_id "
+                            "FROM usage_records WHERE tenant_id = :tenant"
+                        ),
+                        {"tenant": tenant_id},
+                    )
+                )
+                .mappings()
+                .all()
+            )
+        assert len(usage) == 1
+        assert usage[0]["logical_model"] == "chat"
+        assert usage[0]["run_id"] == run_id
+        assert usage[0]["input_tokens"] == result.input_tokens
+        assert usage[0]["output_tokens"] == result.output_tokens
     finally:
         await engine.dispose()
 
@@ -158,6 +203,56 @@ async def test_run_workflow_marks_the_run_failed_when_generation_fails(
                     )
 
         assert await run_status(engine, tenant_id, run_id) == RunStatus.FAILED.value
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.anyio
+async def test_run_workflow_persists_cancelled_state(database_url, temporal_cli_path):
+    engine = create_async_engine(database_url)
+    tenant_id = uuid4()
+    queue = f"runs-{uuid4()}"
+    try:
+        run_id = await seed_run(engine, tenant_id)
+        gateway = ModelGateway(
+            ModelRouter({"chat": ModelRoute(SlowProvider(), "slow-chat")}),
+            timeout_seconds=60.0,
+        )
+        activities = RunActivities(engine, gateway)
+        async with await start_environment(temporal_cli_path) as env:
+            async with Worker(
+                env.client,
+                task_queue=queue,
+                workflows=[AgentRunWorkflow],
+                activities=[
+                    activities.start,
+                    activities.generate,
+                    activities.complete,
+                    activities.fail,
+                    activities.cancel,
+                ],
+            ):
+                handle = await env.client.start_workflow(
+                    AgentRunWorkflow.run,
+                    RunWorkflowInput(
+                        tenant_id=str(tenant_id),
+                        run_id=str(run_id),
+                        prompt="cancel me",
+                    ),
+                    id=f"run-{uuid4()}",
+                    task_queue=queue,
+                )
+                for _ in range(50):
+                    if await run_status(engine, tenant_id, run_id) == RunStatus.RUNNING.value:
+                        break
+                    await asyncio.sleep(0.2)
+                assert await run_status(engine, tenant_id, run_id) == RunStatus.RUNNING.value
+
+                await handle.cancel()
+                with pytest.raises(WorkflowFailureError):
+                    await handle.result()
+
+        assert await run_status(engine, tenant_id, run_id) == RunStatus.CANCELLED.value
     finally:
         await engine.dispose()
 

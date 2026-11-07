@@ -2,7 +2,8 @@ from datetime import datetime
 from typing import Any, cast
 from uuid import UUID
 
-from sqlalchemy import Table, func, select, update
+from sqlalchemy import Table, func, select, text, update
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.engine import RowMapping
 from sqlalchemy.ext.asyncio import AsyncConnection
 
@@ -12,7 +13,13 @@ from packages.domain.runs import (
     ensure_transition,
 )
 from packages.domain.tools import ApprovalStatus, InvocationStatus
-from packages.persistence.models import AgentRun, ToolApproval, ToolInvocation, UsageRecord
+from packages.persistence.models import (
+    AgentRun,
+    TenantBudget,
+    ToolApproval,
+    ToolInvocation,
+    UsageRecord,
+)
 
 
 class TenantRepository:
@@ -68,6 +75,16 @@ class AgentRunRepository(TenantRepository):
         if values.get("status", RunStatus.PENDING) != RunStatus.PENDING:
             raise ValueError("agent runs must be created in PENDING state")
         return await super().create(values)
+
+    async def list(self, *, limit: int = 20, offset: int = 0) -> tuple[RowMapping, ...]:
+        stmt = (
+            select(self._table)
+            .where(self._table.c.tenant_id == self._tenant_id)
+            .order_by(self._table.c.created_at.desc(), self._table.c.id.desc())
+            .limit(limit)
+            .offset(offset)
+        )
+        return tuple((await self._conn.execute(stmt)).mappings().all())
 
     async def transition(
         self, run_id: UUID, *, expected: RunStatus, target: RunStatus
@@ -292,18 +309,45 @@ class UsageRepository(TenantRepository):
         output_tokens: int,
         cost_micros: int,
         run_id: UUID | None,
+        idempotency_key: str | None = None,
     ) -> RowMapping:
-        return await self.create(
-            {
-                "logical_model": logical_model,
-                "input_tokens": input_tokens,
-                "output_tokens": output_tokens,
-                "cost_micros": cost_micros,
-                "run_id": run_id,
-            }
+        values: dict[str, Any] = {
+            "logical_model": logical_model,
+            "input_tokens": input_tokens,
+            "output_tokens": output_tokens,
+            "cost_micros": cost_micros,
+            "run_id": run_id,
+            "idempotency_key": idempotency_key,
+        }
+        if idempotency_key is None:
+            return await self.create(values)
+        stmt = (
+            pg_insert(self._table)
+            .values(**values, tenant_id=self._tenant_id)
+            .on_conflict_do_nothing(
+                index_elements=["tenant_id", "idempotency_key"],
+                index_where=text("idempotency_key IS NOT NULL"),
+            )
+            .returning(*self._table.c)
         )
+        row = (await self._conn.execute(stmt)).mappings().one_or_none()
+        if row is not None:
+            return row
+        existing = await self.by_idempotency_key(idempotency_key)
+        if existing is None:
+            raise RuntimeError("idempotent usage record disappeared")
+        return existing
 
-    async def totals(self, *, logical_model: str | None = None) -> RowMapping:
+    async def by_idempotency_key(self, idempotency_key: str) -> RowMapping | None:
+        stmt = select(self._table).where(
+            self._table.c.tenant_id == self._tenant_id,
+            self._table.c.idempotency_key == idempotency_key,
+        )
+        return (await self._conn.execute(stmt)).mappings().one_or_none()
+
+    async def totals(
+        self, *, logical_model: str | None = None, since: datetime | None = None
+    ) -> RowMapping:
         stmt = select(
             func.count().label("events"),
             func.coalesce(func.sum(self._table.c.input_tokens), 0).label("input_tokens"),
@@ -312,4 +356,40 @@ class UsageRepository(TenantRepository):
         ).where(self._table.c.tenant_id == self._tenant_id)
         if logical_model is not None:
             stmt = stmt.where(self._table.c.logical_model == logical_model)
+        if since is not None:
+            stmt = stmt.where(self._table.c.created_at >= since)
+        return (await self._conn.execute(stmt)).mappings().one()
+
+
+class TenantBudgetRepository(TenantRepository):
+    """One optional budget row per tenant with upsert semantics."""
+
+    def __init__(self, conn: AsyncConnection, tenant_id: UUID) -> None:
+        super().__init__(conn, cast(Table, TenantBudget.__table__), tenant_id)
+
+    async def get_for_tenant(self) -> RowMapping | None:
+        stmt = select(self._table).where(self._table.c.tenant_id == self._tenant_id)
+        return (await self._conn.execute(stmt)).mappings().one_or_none()
+
+    async def set_limits(
+        self, *, monthly_cost_micros: int | None, monthly_tokens: int | None
+    ) -> RowMapping:
+        values = {
+            "tenant_id": self._tenant_id,
+            "monthly_cost_micros": monthly_cost_micros,
+            "monthly_tokens": monthly_tokens,
+        }
+        stmt = (
+            pg_insert(self._table)
+            .values(**values)
+            .on_conflict_do_update(
+                index_elements=["tenant_id"],
+                set_={
+                    "monthly_cost_micros": monthly_cost_micros,
+                    "monthly_tokens": monthly_tokens,
+                    "updated_at": func.now(),
+                },
+            )
+            .returning(*self._table.c)
+        )
         return (await self._conn.execute(stmt)).mappings().one()

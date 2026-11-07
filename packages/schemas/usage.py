@@ -16,6 +16,7 @@ class UsageRequest(BaseModel):
     logical_model: str = Field(pattern=r"^[a-z][a-z0-9_.-]{0,63}$")
     input_tokens: int = Field(ge=0, le=MAX_TOKENS_PER_EVENT)
     output_tokens: int = Field(ge=0, le=MAX_TOKENS_PER_EVENT)
+    idempotency_key: str | None = Field(default=None, min_length=1, max_length=128)
 
 
 class UsageRecorded(BaseModel):

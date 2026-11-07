@@ -1,5 +1,6 @@
 """Side-effecting activities. All database access stays tenant-scoped."""
 
+import logging
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
@@ -20,9 +21,12 @@ from packages.persistence.repository import (
     ToolApprovalRepository,
     ToolApprovalStateConflict,
 )
+from packages.schemas.usage import UsageRequest
+from packages.usage.ledger import UsageLedger
 
 from .contracts import (
     GenerationResult,
+    RunCancelInput,
     RunCompletionInput,
     RunFailureInput,
     RunWorkflowInput,
@@ -31,8 +35,12 @@ from .contracts import (
     ToolApprovalRequest,
 )
 
+logger = logging.getLogger(__name__)
 
-def _run_ids(request: RunWorkflowInput | RunCompletionInput | RunFailureInput) -> tuple[UUID, UUID]:
+
+def _run_ids(
+    request: RunWorkflowInput | RunCompletionInput | RunFailureInput | RunCancelInput,
+) -> tuple[UUID, UUID]:
     try:
         return UUID(request.tenant_id), UUID(request.run_id)
     except ValueError as exc:
@@ -49,9 +57,15 @@ def _approval_id(value: str) -> UUID:
 class RunActivities:
     """Model generation and run-state transitions; no vendor calls are made."""
 
-    def __init__(self, engine: AsyncEngine, model_gateway: ModelGateway) -> None:
+    def __init__(
+        self,
+        engine: AsyncEngine,
+        model_gateway: ModelGateway,
+        usage: UsageLedger | None = None,
+    ) -> None:
         self._engine = engine
         self._model_gateway = model_gateway
+        self._usage = usage
 
     @activity.defn(name="agent_run.start")
     async def start(self, request: RunWorkflowInput) -> str:
@@ -115,13 +129,50 @@ class RunActivities:
                         raise ApplicationError(
                             "agent run changed concurrently", non_retryable=True
                         ) from None
-            return RunWorkflowResult(
+            result = RunWorkflowResult(
                 run_id=request.run_id,
                 status=row["status"],
                 output=request.output,
                 input_tokens=request.input_tokens,
                 output_tokens=request.output_tokens,
             )
+        await self._record_usage(tenant_id, run_id, request)
+        return result
+
+    async def _record_usage(
+        self, tenant_id: UUID, run_id: UUID, request: RunCompletionInput
+    ) -> None:
+        if self._usage is None:
+            return
+        try:
+            await self._usage.record(
+                tenant_id,
+                UsageRequest(
+                    run_id=run_id,
+                    logical_model=request.logical_model,
+                    input_tokens=request.input_tokens,
+                    output_tokens=request.output_tokens,
+                    idempotency_key=f"run:{run_id}",
+                ),
+            )
+        except Exception:
+            # Accounting must not turn a committed success into a workflow failure.
+            logger.exception("failed to record usage", extra={"run_id": str(run_id)})
+
+    @activity.defn(name="agent_run.cancel")
+    async def cancel(self, request: RunCancelInput) -> None:
+        tenant_id, run_id = _run_ids(request)
+        async with tenant_transaction(self._engine, tenant_id) as conn:
+            repo = AgentRunRepository(conn, tenant_id)
+            row = await repo.get(run_id)
+            if row is None or is_terminal(RunStatus(row["status"])):
+                return
+            try:
+                await repo.transition(
+                    run_id, expected=RunStatus(row["status"]), target=RunStatus.CANCELLED
+                )
+            except AgentRunStateConflict:
+                return
 
     @activity.defn(name="agent_run.fail")
     async def fail(self, request: RunFailureInput) -> None:

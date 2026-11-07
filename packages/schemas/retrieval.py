@@ -41,3 +41,15 @@ class RetrievalMatch(BaseModel):
     source: str
     content: str
     score: float = Field(ge=-1.0, le=1.0)
+
+
+class IngestResponse(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    ids: tuple[UUID, ...]
+
+
+class SearchResponse(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    matches: tuple[RetrievalMatch, ...]

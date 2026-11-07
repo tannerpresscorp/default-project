@@ -14,7 +14,7 @@ export PLATFORM_MIGRATION_DATABASE_URL='postgresql+asyncpg://platform_migrator:l
 
 Local database passwords are intentionally public and **only** for this loopback-bound development stack. The migration role owns the schema but is not a superuser; the Compose service starts as the superuser `platform_migrator`, while a native installation must provision the extension once as a database administrator. Never use migration credentials for application traffic. Configure `PLATFORM_OIDC_ISSUER`, `PLATFORM_OIDC_AUDIENCE`, and `PLATFORM_OIDC_JWKS_URL` to use a trusted HTTPS OIDC issuer. The issuer must guarantee the configured UUID tenant claim represents authorized membership for the token subject. Without OIDC configuration, protected endpoints fail closed and readiness reports 503. `PLATFORM_OIDC_TENANT_CLAIM` defaults to `tenant_id`. The app does not issue users, tokens, or tenants.
 
-Health: `GET http://127.0.0.1:8001/health/live`; readiness: `/health/ready`; OpenAPI: `/openapi.json`; authenticated identity: `GET /v1/session` with a bearer token. No tenant header is trusted.
+Health: `GET http://127.0.0.1:8001/health/live`; readiness: `/health/ready`; OpenAPI: `/openapi.json`; Prometheus text counters: `/metrics`; authenticated identity: `GET /v1/session` with a bearer token. No tenant header is trusted. The authenticated runtime surface is `POST/GET /v1/runs`, `GET /v1/runs/{id}/events` (SSE), `POST /v1/runs/{id}/cancel`, `GET/PUT /v1/budget`, `POST /v1/retrieval/documents` and `POST /v1/retrieval/search`. Runs are created in `PENDING` and dispatched to Temporal only when `PLATFORM_TEMPORAL_ADDRESS` is set; otherwise those endpoints fail closed with 503. Budgets are optional and checked at submission.
 
 Error monitoring is optional: export `PLATFORM_SENTRY_DSN` (FastAPI), `SENTRY_DSN` (Django) and set `VITE_SENTRY_DSN` in `packages/web/.env.local` (React). Without them the SDKs stay inert. The Python apps read the process environment; they do not load `.env` files.
 
@@ -42,6 +42,8 @@ export PLATFORM_DATABASE_URL='postgresql+asyncpg://platform_app:local_app_only@1
 export PLATFORM_TEMPORAL_ADDRESS='127.0.0.1:7233'
 .venv-platform/bin/python -m apps.workflow_worker.worker
 ```
+
+Set the same `PLATFORM_TEMPORAL_ADDRESS`, `PLATFORM_TEMPORAL_NAMESPACE` and `PLATFORM_TEMPORAL_TASK_QUEUE` on the API process to enable `POST /v1/runs`. Migration `0006_budgets_usage_idempotency` adds `tenant_budgets` and usage idempotency; run `alembic upgrade head` for both databases after pulling it. The integration suite covers the runtime API, budgets, SSE and retrieval against PostgreSQL, plus real Temporal completion, failure and cancellation.
 
 ### Native PostgreSQL instead of Docker
 

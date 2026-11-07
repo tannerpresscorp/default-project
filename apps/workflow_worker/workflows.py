@@ -4,14 +4,17 @@ External effects run in activities registered by the worker; this module must
 not import SQLAlchemy, model clients or other I/O libraries.
 """
 
+import asyncio
 from datetime import timedelta
 
 from temporalio import workflow
 from temporalio.common import RetryPolicy
 from temporalio.exceptions import ApplicationError
+from temporalio.exceptions import CancelledError as TemporalCancelledError
 
 from .contracts import (
     GenerationResult,
+    RunCancelInput,
     RunCompletionInput,
     RunFailureInput,
     RunWorkflowInput,
@@ -29,6 +32,19 @@ ACTIVITY_RETRY = RetryPolicy(
 ACTIVITY_TIMEOUT = timedelta(seconds=30)
 
 
+async def _persist_cancellation(request: RunWorkflowInput) -> None:
+    """Persist CANCELLED even though the cancelled workflow cannot be retried."""
+    await asyncio.shield(
+        workflow.execute_activity(
+            "agent_run.cancel",
+            RunCancelInput(tenant_id=request.tenant_id, run_id=request.run_id),
+            start_to_close_timeout=ACTIVITY_TIMEOUT,
+            retry_policy=ACTIVITY_RETRY,
+            cancellation_type=workflow.ActivityCancellationType.ABANDON,
+        )
+    )
+
+
 @workflow.defn
 class AgentRunWorkflow:
     """Durable start -> generate -> complete sequence with failure compensation."""
@@ -37,13 +53,13 @@ class AgentRunWorkflow:
     async def run(self, request: RunWorkflowInput) -> RunWorkflowResult:
         if not 0 < len(request.prompt) <= 100_000:
             raise ApplicationError("prompt is invalid", non_retryable=True)
-        await workflow.execute_activity(
-            "agent_run.start",
-            request,
-            start_to_close_timeout=ACTIVITY_TIMEOUT,
-            retry_policy=ACTIVITY_RETRY,
-        )
         try:
+            await workflow.execute_activity(
+                "agent_run.start",
+                request,
+                start_to_close_timeout=ACTIVITY_TIMEOUT,
+                retry_policy=ACTIVITY_RETRY,
+            )
             generated = await workflow.execute_activity(
                 "agent_run.generate",
                 request,
@@ -59,6 +75,7 @@ class AgentRunWorkflow:
                     output=generated.content,
                     input_tokens=generated.input_tokens,
                     output_tokens=generated.output_tokens,
+                    logical_model=request.logical_model,
                 ),
                 result_type=RunWorkflowResult,
                 start_to_close_timeout=ACTIVITY_TIMEOUT,
@@ -71,13 +88,21 @@ class AgentRunWorkflow:
                 input_tokens=completed.input_tokens,
                 output_tokens=completed.output_tokens,
             )
+        except (asyncio.CancelledError, TemporalCancelledError):
+            # Workflow cancellation also cancels awaited activities. Shield the
+            # compensation so the durable CANCELLED state is still persisted.
+            await _persist_cancellation(request)
+            raise
         except Exception:
-            await workflow.execute_activity(
-                "agent_run.fail",
-                RunFailureInput(tenant_id=request.tenant_id, run_id=request.run_id),
-                start_to_close_timeout=ACTIVITY_TIMEOUT,
-                retry_policy=ACTIVITY_RETRY,
-            )
+            if workflow.cancellation_reason() is not None:
+                await _persist_cancellation(request)
+            else:
+                await workflow.execute_activity(
+                    "agent_run.fail",
+                    RunFailureInput(tenant_id=request.tenant_id, run_id=request.run_id),
+                    start_to_close_timeout=ACTIVITY_TIMEOUT,
+                    retry_policy=ACTIVITY_RETRY,
+                )
             raise
 
 

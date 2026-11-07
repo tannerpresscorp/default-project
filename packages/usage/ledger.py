@@ -1,5 +1,6 @@
 """Append-only usage ledger with deterministic pricing and tenant isolation."""
 
+from datetime import datetime
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncEngine
@@ -11,7 +12,7 @@ from packages.schemas.usage import UsageRecorded, UsageRequest, UsageTotals
 
 
 class UsageLedger:
-    """Record token usage and read tenant totals; no budget enforcement yet."""
+    """Record token usage idempotently and read tenant totals."""
 
     def __init__(self, engine: AsyncEngine, price_book: PriceBook = DEFAULT_PRICE_BOOK) -> None:
         self._engine = engine
@@ -27,6 +28,7 @@ class UsageLedger:
                 output_tokens=request.output_tokens,
                 cost_micros=cost_micros,
                 run_id=request.run_id,
+                idempotency_key=request.idempotency_key,
             )
         return UsageRecorded(
             id=row["id"],
@@ -36,9 +38,17 @@ class UsageLedger:
             cost_micros=row["cost_micros"],
         )
 
-    async def totals(self, tenant_id: UUID, *, logical_model: str | None = None) -> UsageTotals:
+    async def totals(
+        self,
+        tenant_id: UUID,
+        *,
+        logical_model: str | None = None,
+        since: datetime | None = None,
+    ) -> UsageTotals:
         async with tenant_transaction(self._engine, tenant_id) as conn:
-            row = await UsageRepository(conn, tenant_id).totals(logical_model=logical_model)
+            row = await UsageRepository(conn, tenant_id).totals(
+                logical_model=logical_model, since=since
+            )
         return UsageTotals(
             events=row["events"],
             input_tokens=row["input_tokens"],

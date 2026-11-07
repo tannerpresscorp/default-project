@@ -38,6 +38,7 @@ TENANT_TABLES = (
     "tool_invocations",
     "tool_approvals",
     "usage_records",
+    "tenant_budgets",
 )
 
 
@@ -209,14 +210,46 @@ class UsageRecord(Base):
         ),
         Index("ix_usage_records_tenant_created", "tenant_id", "created_at"),
         Index("ix_usage_records_tenant_model", "tenant_id", "logical_model"),
+        Index(
+            "uq_usage_records_tenant_idempotency",
+            "tenant_id",
+            "idempotency_key",
+            unique=True,
+            postgresql_where=text("idempotency_key IS NOT NULL"),
+        ),
     )
     id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
     tenant_id: Mapped[UUID] = mapped_column(
         Uuid, ForeignKey("tenants.id"), nullable=False, index=True
     )
     run_id: Mapped[UUID | None] = mapped_column(Uuid, nullable=True)
+    idempotency_key: Mapped[str | None] = mapped_column(String(128), nullable=True)
     logical_model: Mapped[str] = mapped_column(String(64), nullable=False)
     input_tokens: Mapped[int] = mapped_column(Integer, nullable=False)
     output_tokens: Mapped[int] = mapped_column(Integer, nullable=False)
     cost_micros: Mapped[int] = mapped_column(BigInteger, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class TenantBudget(Base):
+    """Optional monthly admission limits. Absent columns mean unlimited."""
+
+    __tablename__ = "tenant_budgets"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", name="uq_tenant_budgets_tenant_id"),
+        CheckConstraint(
+            "(monthly_cost_micros IS NULL OR monthly_cost_micros >= 0) AND "
+            "(monthly_tokens IS NULL OR monthly_tokens >= 0)",
+            name="ck_tenant_budgets_nonnegative",
+        ),
+    )
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
+    tenant_id: Mapped[UUID] = mapped_column(
+        Uuid, ForeignKey("tenants.id"), nullable=False, index=True
+    )
+    monthly_cost_micros: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    monthly_tokens: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )

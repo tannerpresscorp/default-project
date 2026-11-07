@@ -23,6 +23,23 @@ def test_health_is_public_and_schema_is_available():
         assert client.get("/openapi.json").status_code == 200
 
 
+def test_metrics_are_public_bounded_and_count_requests():
+    app = create_app(Settings(otel_enabled=False), verifier=FakeVerifier())
+    with TestClient(app) as client:
+        client.get("/health/live")
+        client.get("/does-not-exist")
+        response = client.get("/metrics")
+
+        assert response.status_code == 200
+        assert response.headers["content-type"].startswith("text/plain")
+        body = response.text
+        assert (
+            'platform_http_requests_total{method="GET",path="/health/live",status="200"} 1' in body
+        )
+        assert 'path="unmatched",status="404"' in body
+        assert "tenant_id" not in body
+
+
 def test_protected_context_rejects_missing_and_invalid_credentials():
     app = create_app(Settings(), verifier=FakeVerifier())
     with TestClient(app) as client:

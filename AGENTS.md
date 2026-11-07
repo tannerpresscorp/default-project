@@ -40,14 +40,14 @@
 - `apps/api` is an additive FastAPI control-plane foundation; it does not replace the product API.
   Python 3.12 dependencies are in `requirements-platform.txt` and `requirements-platform-dev.txt`;
   use a separate `.venv-platform` so the existing Django environment remains intact.
-- `packages/{auth,config,domain,model_clients,observability,persistence,policies,schemas}` are
-  shared Python platform packages. PostgreSQL and Alembic own platform persistence, not Django
+- `packages/{auth,config,domain,model_clients,observability,persistence,policies,schemas,usage}`
+  are shared Python platform packages. PostgreSQL and Alembic own platform persistence, not Django
   migrations. Tenant claims must be verified and DB work must use transaction-local RLS context
   with a non-owner, non-superuser, non-BYPASSRLS runtime role. See
   `docs/architecture/multi-tenancy.md`.
 - `apps/model_gateway` is an in-process foundation: static logical routing, bounded requests, one
-  timeout, normalized errors and a deterministic offline provider, with no vendor calls, retries,
-  quotas or accounting yet.
+  timeout, normalized errors and a deterministic offline provider, with no vendor calls or retries.
+  Usage accounting and budgets are separate layers, not gateway features.
 - `apps/tool_gateway` is an in-process foundation: static registry, tenant allowlists, JSON Schema
   validation, audited/idempotent invocations, durable approvals and timeouts, with no MCP,
   network or real tool execution yet.
@@ -57,9 +57,18 @@
 - `apps/workflow_worker` implements deterministic Temporal workflows (`AgentRunWorkflow`,
   `ToolApprovalWorkflow`) with all database/model effects in activities. Configure
   `PLATFORM_TEMPORAL_ADDRESS`, `PLATFORM_TEMPORAL_NAMESPACE` and `PLATFORM_TEMPORAL_TASK_QUEUE`;
-  the worker also requires `PLATFORM_DATABASE_URL`. Real Temporal deployment, streaming,
-  cancellation, budgets, sandbox execution, evaluations and production manifests are still later
-  phases.
+  the worker also requires `PLATFORM_DATABASE_URL`.
+- `apps/api/runtime.py` exposes the authenticated runtime surface under `/v1`: submit/read/list/
+  cancel runs, poll-until-terminal SSE status events, tenant monthly budget read/replace, and
+  retrieval ingest/search. PostgreSQL remains authoritative; Temporal dispatch is optional and
+  the run endpoints fail closed with 503 when `PLATFORM_TEMPORAL_ADDRESS` is unset. Budgets are
+  checked at submission and usage is recorded idempotently on run completion. Public `GET /metrics`
+  exposes bounded in-process Prometheus counters (no tenant or run labels).
+- `packages/usage` provides the append-only ledger and monthly admission budgets. Absent limits
+  mean unlimited; budget checks are best-effort admission control, not reservations.
+- Real Temporal deployment, real sandbox execution, MCP/network tools and vendor model adapters
+  remain explicit non-goals, not unfinished phases. Evaluations and gated Kubernetes manifests
+  are implemented.
 - Local setup and explicit commands (including isolated integration-test database migration) are
   in `docs/architecture/development.md`. The original Django pytest config targets `api/`; run
   platform tests with `pytest -c pyproject.toml tests/unit` and `tests/integration` separately.

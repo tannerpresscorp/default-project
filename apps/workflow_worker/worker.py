@@ -12,6 +12,7 @@ from apps.model_gateway.router import ModelRoute, ModelRouter
 from packages.config.settings import Settings
 from packages.model_clients.fake import DeterministicModelProvider
 from packages.observability.logging import configure_logging
+from packages.usage.ledger import UsageLedger
 
 from .activities import RunActivities, ToolApprovalActivities
 from .workflows import AgentRunWorkflow, ToolApprovalWorkflow
@@ -33,7 +34,7 @@ async def run_worker(settings: Settings) -> None:
         raise RuntimeError("PLATFORM_TEMPORAL_ADDRESS is required to run the worker")
 
     engine = create_async_engine(settings.database_url, pool_pre_ping=True)
-    activities = RunActivities(engine, build_model_gateway())
+    activities = RunActivities(engine, build_model_gateway(), UsageLedger(engine))
     approvals = ToolApprovalActivities(engine)
     try:
         client = await Client.connect(
@@ -48,6 +49,7 @@ async def run_worker(settings: Settings) -> None:
                 activities.generate,
                 activities.complete,
                 activities.fail,
+                activities.cancel,
                 approvals.request,
                 approvals.decide,
                 approvals.expire,

@@ -7,6 +7,6 @@ Adopt Temporal in Phase 4; workflow code must remain deterministic and external 
 ## Alternatives considered
 In-process tasks cannot provide equivalent durability; custom queues require building orchestration semantics.
 ## Consequences
-Workers, workflow history, retries and operational procedures must be managed. Phase 4 implements `AgentRunWorkflow` and `ToolApprovalWorkflow` with a Temporal worker; workflow code is deterministic and all database/model effects run in activities. Production clustering, retention, archival and worker deployment are still later-phase work.
+Workers, workflow history, retries and operational procedures must be managed. Phase 4 implements `AgentRunWorkflow` and `ToolApprovalWorkflow` with a Temporal worker; workflow code is deterministic and all database/model effects run in activities. A managed production cluster, retention, archival and worker deployment are out of scope for this repository and remain operator responsibilities.
 ## Operational risks
 Stuck workflows, history growth, worker compatibility and duplicate side effects require monitoring and idempotency.

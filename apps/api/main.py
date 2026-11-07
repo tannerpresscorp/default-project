@@ -5,7 +5,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, PlainTextResponse
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from opentelemetry.sdk.resources import Resource
@@ -15,13 +15,19 @@ from opentelemetry.trace import Span
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 from starlette.exceptions import HTTPException as StarletteHTTPException
+from temporalio.client import Client
 
+from apps.api import runtime as runtime_api
+from apps.retrieval.service import RetrievalService
 from packages.auth.context import authenticated_principal
 from packages.auth.identity import IdentityVerifier, Principal, Verifier
 from packages.config.settings import Settings
+from packages.model_clients.embeddings import DeterministicEmbeddingProvider
 from packages.observability.logging import configure_logging
+from packages.observability.metrics import Metrics
 from packages.observability.sentry import capture_exception, init_sentry
 from packages.persistence.models import TENANT_TABLES
+from packages.usage.budget import BudgetService
 
 
 def sanitize_http_span(span: Span, _scope: dict) -> None:
@@ -42,6 +48,9 @@ def create_app(
     *,
     verifier: Verifier | None = None,
     tracer_provider: TracerProvider | None = None,
+    run_dispatcher: runtime_api.RunDispatcher | None = None,
+    retrieval_service: runtime_api.RetrievalApi | None = None,
+    budget_service: runtime_api.BudgetApi | None = None,
 ) -> FastAPI:
     settings = settings or Settings()
     logger = configure_logging()
@@ -72,6 +81,29 @@ def create_app(
             if settings.database_url
             else None
         )
+        app.state.run_dispatcher = run_dispatcher
+        app.state.retrieval = retrieval_service
+        app.state.budget = budget_service
+        app.state.temporal_client = None
+        if app.state.engine is not None:
+            if app.state.retrieval is None:
+                app.state.retrieval = RetrievalService(
+                    app.state.engine, DeterministicEmbeddingProvider()
+                )
+            if app.state.budget is None:
+                app.state.budget = BudgetService(app.state.engine)
+            if app.state.run_dispatcher is None and settings.temporal_address:
+                try:
+                    app.state.temporal_client = await Client.connect(
+                        settings.temporal_address, namespace=settings.temporal_namespace
+                    )
+                except Exception:
+                    logger.exception("Temporal unavailable; run dispatch is disabled")
+                else:
+                    app.state.run_dispatcher = runtime_api.TemporalRunDispatcher(
+                        app.state.temporal_client,
+                        settings.temporal_task_queue or "agent-runs",
+                    )
         logger.info("platform API started")
         try:
             yield
@@ -84,6 +116,8 @@ def create_app(
 
     app = FastAPI(title="Agent Platform API", version="0.1.0", lifespan=lifespan)
     app.state.verifier = verifier
+    metrics = Metrics()
+    app.state.metrics = metrics
 
     @app.exception_handler(StarletteHTTPException)
     async def http_error(_request: Request, exc: StarletteHTTPException) -> JSONResponse:
@@ -111,6 +145,27 @@ def create_app(
                 status_code=500,
                 content={"error": {"code": "internal_error", "message": "Internal server error"}},
             )
+
+    @app.middleware("http")
+    async def observe_requests(request: Request, call_next):
+        response = await call_next(request)
+        route = request.scope.get("route")
+        path = getattr(route, "path", None)
+        if path is None or response.status_code == 404:
+            path = "unmatched"
+        metrics.increment(
+            "platform_http_requests_total",
+            {
+                "method": request.method,
+                "path": path,
+                "status": str(response.status_code),
+            },
+        )
+        return response
+
+    @app.get("/metrics", include_in_schema=False, tags=["health"])
+    async def metrics_view() -> PlainTextResponse:
+        return PlainTextResponse(metrics.render(), media_type="text/plain; version=0.0.4")
 
     @app.get("/health/live", tags=["health"])
     async def live() -> dict[str, str]:
@@ -167,12 +222,17 @@ def create_app(
         return {"subject": principal.subject, "tenant_id": str(principal.tenant_id)}
 
     app.include_router(router)
+    app.include_router(
+        runtime_api.router,
+        prefix="/v1",
+        dependencies=[Depends(authenticated_principal)],
+    )
     if settings.otel_enabled:
         FastAPIInstrumentor.instrument_app(
             app,
             tracer_provider=tracer_provider,
             server_request_hook=sanitize_http_span,
-            excluded_urls="health/live,health/ready",
+            excluded_urls="health/live,health/ready,metrics",
             http_capture_headers_server_request=["^$"],
             http_capture_headers_server_response=["^$"],
             http_capture_headers_sanitize_fields=[".*"],

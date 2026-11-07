@@ -1,6 +1,6 @@
 # Retrieval
 
-Phase 5 implements tenant-scoped pgvector retrieval. It stores embedded chunks and returns ranked content, but does not provide ingestion APIs, document parsing, chunking, reranking, hybrid search or retrieval-augmented generation wiring.
+The platform provides tenant-scoped pgvector retrieval. It stores embedded chunks, exposes authenticated ingestion and search endpoints, and returns ranked content. It does not provide document parsing, chunking, reranking, hybrid search or retrieval-augmented generation wiring.
 
 ## Components
 
@@ -8,6 +8,15 @@ Phase 5 implements tenant-scoped pgvector retrieval. It stores embedded chunks a
 - `packages/schemas/retrieval.py` bounds documents, batches and searches. Content is capped at 20,000 characters, batches at 100 documents and searches at 50 results.
 - `packages/persistence/models.py` defines `RetrievalChunk` with a 1536-dimension vector, a `(tenant_id, collection)` index and an HNSW `vector_cosine_ops` index.
 - `apps/retrieval/service.py` embeds and writes inside `tenant_transaction`, and filters search by tenant before applying the optional collection filter.
+
+## API
+
+`apps/api/runtime.py` exposes:
+
+- `POST /v1/retrieval/documents` with a bounded batch of `{collection, source, content}` documents; returns the stored chunk IDs.
+- `POST /v1/retrieval/search` with `{query, collection?, limit?}`; returns ranked matches with cosine scores.
+
+Both require authentication and take the tenant only from the verified principal. The API wires the deterministic offline embedder by default; a production adapter is an explicit non-goal in this repository.
 
 ## Isolation
 

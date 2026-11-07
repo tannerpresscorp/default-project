@@ -34,6 +34,13 @@ class RunCompletionInput:
     output: str
     input_tokens: int
     output_tokens: int
+    logical_model: str = "chat"
+
+
+@dataclass(frozen=True)
+class RunCancelInput:
+    tenant_id: str
+    run_id: str
 
 
 @dataclass(frozen=True)
