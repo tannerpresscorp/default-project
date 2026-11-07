@@ -49,16 +49,26 @@
   timeout, normalized errors and a deterministic offline provider, with no vendor calls, retries,
   quotas or accounting yet.
 - `apps/tool_gateway` is an in-process foundation: static registry, tenant allowlists, JSON Schema
-  validation, approval denial and timeouts, with no MCP, network, audit or real execution yet.
-- Do not call the runtime, workflows, retrieval or sandbox implemented; they remain later phases.
+  validation, audited/idempotent invocations, durable approvals and timeouts, with no MCP,
+  network or real tool execution yet.
+- `apps/retrieval` implements tenant-scoped pgvector retrieval (1536-dimension chunks, cosine HNSW
+  index, forced RLS). `packages/model_clients/embeddings.py` provides the provider contract and a
+  deterministic offline embedder only.
+- `apps/workflow_worker` implements deterministic Temporal workflows (`AgentRunWorkflow`,
+  `ToolApprovalWorkflow`) with all database/model effects in activities. Configure
+  `PLATFORM_TEMPORAL_ADDRESS`, `PLATFORM_TEMPORAL_NAMESPACE` and `PLATFORM_TEMPORAL_TASK_QUEUE`;
+  the worker also requires `PLATFORM_DATABASE_URL`. Real Temporal deployment, streaming,
+  cancellation, budgets, sandbox execution, evaluations and production manifests are still later
+  phases.
 - Local setup and explicit commands (including isolated integration-test database migration) are
   in `docs/architecture/development.md`. The original Django pytest config targets `api/`; run
   platform tests with `pytest -c pyproject.toml tests/unit` and `tests/integration` separately.
+  Integration tests need a migrated `platform_test` database; Temporal workflow tests also need
+  `TEMPORAL_CLI_PATH` and are skipped without it.
 - Platform checks: `python -m ruff check apps packages tests`, `python -m ruff format --check
   apps packages tests`, `python -m mypy`, and the platform pytest commands.
-- CI also has a Python 3.12 platform job that runs these checks and PostgreSQL isolation tests
-  against a dedicated test database. Later-phase container, evaluation and deployment gates are
-  not implemented yet.
+- CI also has a Python 3.12 platform job that runs these checks, downloads the Temporal CLI, and
+  runs PostgreSQL/pgvector plus Temporal integration tests against a dedicated test database.
 
 ## Commands (verified)
 Node / workspace — root scripts delegate across all packages:

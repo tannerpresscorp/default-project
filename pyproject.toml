@@ -15,6 +15,7 @@ include = [
     "packages/persistence/**/*.py",
     "packages/policies/**/*.py",
     "packages/schemas/**/*.py",
+    "packages/usage/**/*.py",
     "tests/**/*.py",
 ]
 
@@ -26,8 +27,12 @@ python_version = "3.12"
 explicit_package_bases = true
 files = [
     "apps/api",
+    "apps/eval_service",
     "apps/model_gateway",
+    "apps/retrieval",
+    "apps/sandbox_manager",
     "apps/tool_gateway",
+    "apps/workflow_worker",
     "packages/auth",
     "packages/config",
     "packages/domain",
@@ -36,6 +41,7 @@ files = [
     "packages/persistence",
     "packages/policies",
     "packages/schemas",
+    "packages/usage",
 ]
 ignore_missing_imports = true
 exclude = ["packages/persistence/migrations/"]

@@ -1,9 +1,12 @@
 PYTHON ?= .venv-platform/bin/python
 COMPOSE = docker compose -f infra/local/compose.yaml
 
-.PHONY: dev test lint typecheck migrate integration-test
+.PHONY: dev test lint typecheck migrate integration-test worker
 dev:
 	$(COMPOSE) up -d --wait postgres redis
+
+worker:
+	$(PYTHON) -m apps.workflow_worker.worker
 
 test:
 	$(PYTHON) -m pytest -c pyproject.toml tests/unit

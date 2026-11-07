@@ -1,0 +1,12 @@
+This chart is gated and renders nothing until `global.enabled=true` plus at
+least one component is enabled. It is an unvalidated starting point, not a
+production deployment.
+
+Required when enabled:
+
+- `global.image.repository` and `global.image.tag` (prefer immutable digests)
+- `api.existingSecret` and/or `worker.existingSecret`
+- database and Temporal CIDRs for egress policy
+- `networkPolicy.ingressNamespace` for API ingress
+
+Run `helm template` and a policy review before applying to any cluster.

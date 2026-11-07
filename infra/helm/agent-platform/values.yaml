@@ -1,0 +1,70 @@
+# Gated defaults: nothing renders until global.enabled is set explicitly.
+global:
+  enabled: false
+  image:
+    repository: ""
+    tag: ""
+    pullPolicy: IfNotPresent
+  imagePullSecrets: []
+  serviceAccount:
+    create: true
+    name: ""
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 10001
+    runAsGroup: 10001
+    fsGroup: 10001
+    seccompProfile:
+      type: RuntimeDefault
+  securityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop:
+        - ALL
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+api:
+  enabled: false
+  replicas: 2
+  port: 8001
+  # Required when enabled. Must contain PLATFORM_DATABASE_URL, OIDC settings
+  # and any optional Sentry configuration. Never commit secret values.
+  existingSecret: ""
+  livenessPath: /health/live
+  readinessPath: /health/ready
+  env:
+    PLATFORM_OTEL_ENABLED: "true"
+    PLATFORM_OTEL_TRACES_ENDPOINT: ""
+  topologySpreadConstraints: []
+
+worker:
+  enabled: false
+  replicas: 1
+  existingSecret: ""
+  terminationGracePeriodSeconds: 120
+  env:
+    PLATFORM_TEMPORAL_ADDRESS: ""
+    PLATFORM_TEMPORAL_NAMESPACE: default
+    PLATFORM_TEMPORAL_TASK_QUEUE: agent-runs
+
+networkPolicy:
+  enabled: true
+  # Namespace allowed to reach the API, for example an ingress controller.
+  ingressNamespace: ""
+  database:
+    cidr: ""
+    port: 5432
+  temporal:
+    cidr: ""
+    port: 7233
+
+podDisruptionBudget:
+  enabled: false
+  minAvailable: 1

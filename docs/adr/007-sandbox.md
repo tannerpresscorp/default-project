@@ -3,7 +3,7 @@
 ## Context
 Generated code is hostile and cannot execute inside an agent runtime container.
 ## Decision
-Use a separate sandbox manager interface, with isolated ephemeral execution and restricted credentials, resources and network; implement in Phase 6.
+Use a separate sandbox manager interface, with isolated ephemeral execution and restricted credentials, resources and network. Phase 6 implements the deny-by-default policy, timeout, output bound and backend protocol; no real execution adapter exists yet.
 ## Alternatives considered
 In-process execution is unsafe; microVMs, gVisor and hardened jobs are possible adapters, not yet selected or implemented.
 ## Consequences

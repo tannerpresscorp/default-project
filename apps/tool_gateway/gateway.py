@@ -35,7 +35,12 @@ class ToolGateway:
         return tuple(allowed)
 
     async def invoke(
-        self, tenant_id: UUID, tool_name: str, arguments: dict[str, Any]
+        self,
+        tenant_id: UUID,
+        tool_name: str,
+        arguments: dict[str, Any],
+        *,
+        approval_granted: bool = False,
     ) -> ToolResult:
         # Authorize before lookup so unauthorized callers cannot enumerate the registry.
         if not await self._policy.is_allowed(tenant_id, tool_name):
@@ -44,7 +49,7 @@ class ToolGateway:
         if tool is None:
             raise ToolNotFound(tool_name)
         definition = tool.definition
-        if definition.requires_approval:
+        if definition.requires_approval and not approval_granted:
             raise ToolApprovalRequired(tool_name)
         self._validate(definition, arguments)
         try:

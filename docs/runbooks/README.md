@@ -1,3 +1,5 @@
 # Operational runbooks
 
-Runbooks are deferred to production hardening in Phase 8. Provider outages, tool outages, stuck workflows, high error rates, token spend, tenant isolation incidents, database degradation and sandbox exhaustion are not operationally supported by this Phase 1 skeleton.
+These runbooks describe the gated baseline only. Nothing here proves production readiness, and no production deployment is supported by this repository yet.
+
+- [Platform operations](platform-operations.md): deployment gate, migration, rollback, worker drain and incident triage.

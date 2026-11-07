@@ -1,0 +1,9 @@
+apiVersion: v2
+name: agent-platform
+description: >-
+  Gated, unvalidated starting point for the FastAPI control plane and Temporal
+  worker. It is never applied by CI and does not represent a production-ready
+  deployment.
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

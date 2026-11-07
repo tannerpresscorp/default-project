@@ -75,7 +75,12 @@ jobs:
         env:
           PLATFORM_MIGRATION_DATABASE_URL: postgresql+asyncpg://platform_migrator:local_migrator_only@127.0.0.1:5432/platform_test
         run: python -m alembic check
-      - name: PostgreSQL isolation integration tests
+      - name: Install Temporal CLI for integration tests
+        run: |
+          curl -sSfL https://github.com/temporalio/cli/releases/download/v1.10.0/temporal_cli_1.10.0_linux_amd64.tar.gz \
+            | tar -xz -C "$RUNNER_TEMP"
+          echo "TEMPORAL_CLI_PATH=$RUNNER_TEMP/temporal" >> "$GITHUB_ENV"
+      - name: PostgreSQL and Temporal integration tests
         env:
           PLATFORM_TEST_DATABASE_URL: postgresql+asyncpg://platform_app:local_app_only@127.0.0.1:5432/platform_test
         run: python -m pytest -c pyproject.toml tests/integration

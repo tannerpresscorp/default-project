@@ -1,3 +1,5 @@
 # Kubernetes
 
-Reserved for platform deployment configuration in Phase 8.
+The deployment baseline lives in [../helm/agent-platform](../helm/agent-platform). It is gated, renders nothing by default and is not validated against a live cluster.
+
+Do not add a second set of raw manifests here. Cluster-specific overlays, ingress, secret-store integration, migration jobs and policy exceptions belong in the deployment repository that owns the target cluster.

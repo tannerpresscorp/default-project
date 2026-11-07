@@ -1,23 +1,44 @@
 from datetime import datetime
+from typing import Any
 from uuid import UUID, uuid4
 
+from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
+    JSON,
+    BigInteger,
     CheckConstraint,
     DateTime,
     ForeignKey,
     ForeignKeyConstraint,
     Index,
+    Integer,
     String,
     UniqueConstraint,
     Uuid,
     func,
+    text,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
+from packages.domain.retrieval import EMBEDDING_DIMENSIONS
 from packages.domain.runs import TERMINAL_STATUSES, RunStatus
+from packages.domain.tools import ApprovalStatus, InvocationStatus
 
 RUN_STATUS_SQL = ", ".join(f"'{status.value}'" for status in RunStatus)
 TERMINAL_STATUS_SQL = ", ".join(sorted(f"'{status.value}'" for status in TERMINAL_STATUSES))
+INVOCATION_STATUS_SQL = ", ".join(f"'{status.value}'" for status in InvocationStatus)
+APPROVAL_STATUS_SQL = ", ".join(f"'{status.value}'" for status in ApprovalStatus)
+TENANT_TABLES = (
+    "tenants",
+    "agents",
+    "agent_versions",
+    "conversations",
+    "agent_runs",
+    "retrieval_chunks",
+    "tool_invocations",
+    "tool_approvals",
+    "usage_records",
+)
 
 
 class Base(DeclarativeBase):
@@ -98,3 +119,104 @@ class AgentRun(Base):
     )
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class RetrievalChunk(Base):
+    __tablename__ = "retrieval_chunks"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "id", name="uq_retrieval_chunks_tenant_id_id"),
+        Index("ix_retrieval_chunks_tenant_collection", "tenant_id", "collection"),
+        Index(
+            "ix_retrieval_chunks_embedding",
+            "embedding",
+            postgresql_using="hnsw",
+            postgresql_ops={"embedding": "vector_cosine_ops"},
+        ),
+    )
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
+    tenant_id: Mapped[UUID] = mapped_column(
+        Uuid, ForeignKey("tenants.id"), nullable=False, index=True
+    )
+    collection: Mapped[str] = mapped_column(String(64), nullable=False)
+    source: Mapped[str] = mapped_column(String(500), nullable=False)
+    content: Mapped[str] = mapped_column(String(20_000), nullable=False)
+    embedding: Mapped[list[float]] = mapped_column(Vector(EMBEDDING_DIMENSIONS), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class ToolInvocation(Base):
+    __tablename__ = "tool_invocations"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "id", name="uq_tool_invocations_tenant_id_id"),
+        CheckConstraint(f"status IN ({INVOCATION_STATUS_SQL})", name="ck_tool_invocations_status"),
+        Index(
+            "uq_tool_invocations_tenant_idempotency",
+            "tenant_id",
+            "idempotency_key",
+            unique=True,
+            postgresql_where=text("idempotency_key IS NOT NULL"),
+        ),
+        Index("ix_tool_invocations_tenant_tool", "tenant_id", "tool_name"),
+    )
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
+    tenant_id: Mapped[UUID] = mapped_column(
+        Uuid, ForeignKey("tenants.id"), nullable=False, index=True
+    )
+    tool_name: Mapped[str] = mapped_column(String(64), nullable=False)
+    idempotency_key: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    arguments_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False)
+    result: Mapped[Any | None] = mapped_column(JSON, nullable=True)
+    error_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class ToolApproval(Base):
+    __tablename__ = "tool_approvals"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "id", name="uq_tool_approvals_tenant_id_id"),
+        CheckConstraint(f"status IN ({APPROVAL_STATUS_SQL})", name="ck_tool_approvals_status"),
+        Index(
+            "ix_tool_approvals_lookup",
+            "tenant_id",
+            "tool_name",
+            "arguments_digest",
+            "status",
+        ),
+    )
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
+    tenant_id: Mapped[UUID] = mapped_column(
+        Uuid, ForeignKey("tenants.id"), nullable=False, index=True
+    )
+    tool_name: Mapped[str] = mapped_column(String(64), nullable=False)
+    arguments_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, server_default="PENDING")
+    requested_by: Mapped[str] = mapped_column(String(200), nullable=False)
+    decided_by: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class UsageRecord(Base):
+    __tablename__ = "usage_records"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "id", name="uq_usage_records_tenant_id_id"),
+        CheckConstraint(
+            "input_tokens >= 0 AND output_tokens >= 0 AND cost_micros >= 0",
+            name="ck_usage_records_nonnegative",
+        ),
+        Index("ix_usage_records_tenant_created", "tenant_id", "created_at"),
+        Index("ix_usage_records_tenant_model", "tenant_id", "logical_model"),
+    )
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
+    tenant_id: Mapped[UUID] = mapped_column(
+        Uuid, ForeignKey("tenants.id"), nullable=False, index=True
+    )
+    run_id: Mapped[UUID | None] = mapped_column(Uuid, nullable=True)
+    logical_model: Mapped[str] = mapped_column(String(64), nullable=False)
+    input_tokens: Mapped[int] = mapped_column(Integer, nullable=False)
+    output_tokens: Mapped[int] = mapped_column(Integer, nullable=False)
+    cost_micros: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

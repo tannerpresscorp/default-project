@@ -1,3 +1,5 @@
 # Docker
 
-Reserved for platform application images in Phase 8.
+No platform application image is committed or built in CI yet. Phase 8 adds only gated Helm manifests and an operations runbook.
+
+A deployer that builds an image must pin a Python 3.12 base image by digest, install `requirements-platform.txt`, run as a non-root user, use a read-only root filesystem, and provide no build secrets. The image must not include `.venv`, tests, `.env` files or repository credentials. Do not claim an image is production-ready until it has been built, scanned and exercised in the target environment.

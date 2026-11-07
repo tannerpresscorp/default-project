@@ -21,6 +21,7 @@ from packages.auth.identity import IdentityVerifier, Principal, Verifier
 from packages.config.settings import Settings
 from packages.observability.logging import configure_logging
 from packages.observability.sentry import capture_exception, init_sentry
+from packages.persistence.models import TENANT_TABLES
 
 
 def sanitize_http_span(span: Span, _scope: dict) -> None:
@@ -135,20 +136,22 @@ def create_app(
                     ).one()
                     if role.rolsuper or role.rolbypassrls:
                         raise ValueError("Unsafe database role")
+                    placeholders = ", ".join(f":t{index}" for index in range(len(TENANT_TABLES)))
+                    table_params = {f"t{index}": name for index, name in enumerate(TENANT_TABLES)}
                     safe_tables = (
                         await conn.execute(
-                            text("""SELECT count(*) FROM pg_class c
+                            text(f"""SELECT count(*) FROM pg_class c
                         JOIN pg_namespace n ON n.oid = c.relnamespace
-                        WHERE n.nspname = current_schema() AND c.relname IN
-                          ('tenants', 'agents', 'agent_versions', 'conversations', 'agent_runs')
+                        WHERE n.nspname = current_schema() AND c.relname IN ({placeholders})
                           AND c.relrowsecurity AND c.relforcerowsecurity
                           AND NOT pg_has_role(current_user, c.relowner, 'MEMBER')
                           AND EXISTS (SELECT 1 FROM pg_policy p WHERE p.polrelid = c.oid
                                       AND p.polname = 'tenant_isolation' AND p.polqual IS NOT NULL
-                                      AND p.polwithcheck IS NOT NULL)""")
+                                      AND p.polwithcheck IS NOT NULL)"""),
+                            table_params,
                         )
                     ).scalar_one()
-                    if safe_tables != 5:
+                    if safe_tables != len(TENANT_TABLES):
                         raise ValueError("Database isolation is not configured safely")
                     await conn.execute(text("SELECT 1 FROM tenants LIMIT 1"))
         except Exception as exc:

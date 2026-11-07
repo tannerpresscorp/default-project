@@ -1,6 +1,16 @@
 # Agent runtime
 
-Phase 2 implements the durable run state machine only: agent-run statuses, allowed transitions, lifecycle timestamps, and tenant-scoped optimistic transitions. It does not implement orchestration, an API, execution, checkpointing, cancellation, budgets, approvals, or Temporal. Phase 4 should use deterministic Temporal workflows with external operations in activities. Interactive requests must not become the only copy of critical state.
+The runtime is split into a durable PostgreSQL state machine and deterministic Temporal workflows. PostgreSQL is authoritative for run status, timestamps and approvals; Temporal owns retries, timers and recovery. External effects (database writes and model calls) run only in activities, and interactive requests are never the only copy of critical state. No runtime HTTP API, streaming, budgets or cancellation endpoint exists yet.
+
+## Temporal workflows
+
+`apps/workflow_worker/` contains the worker, workflow and activity definitions:
+
+- `AgentRunWorkflow` performs `agent_run.start` → `agent_run.generate` → `agent_run.complete`. If generation or completion fails, it runs `agent_run.fail` before re-raising so the persisted run reaches `FAILED` instead of remaining `RUNNING`.
+- `ToolApprovalWorkflow` creates a durable approval record, waits on a `decide` signal with a bounded timer, then persists `APPROVED` or `DENIED`. A timeout persists `EXPIRED` and fails the workflow.
+- Workflow modules import no database, HTTP or model-client libraries. All non-deterministic work is in `activities.py`, which keeps every query inside `tenant_transaction`.
+
+Activity retries are bounded (`maximum_attempts=3`) with a 30-second start-to-close timeout. Configuration is `PLATFORM_TEMPORAL_ADDRESS` (required for the worker), `PLATFORM_TEMPORAL_NAMESPACE` (default `default`) and `PLATFORM_TEMPORAL_TASK_QUEUE` (default `agent-runs`). The worker requires `PLATFORM_DATABASE_URL`. Only the deterministic offline model provider is wired; the worker makes no vendor calls.
 
 ## States
 
