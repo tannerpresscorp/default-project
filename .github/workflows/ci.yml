@@ -21,6 +21,49 @@ jobs:
       - run: pnpm test
       - run: pnpm --filter web build
 
+  helm:
+    name: Helm chart (lint and render)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install Helm
+        run: |
+          curl -sSfL https://get.helm.sh/helm-v4.3.1-linux-amd64.tar.gz \
+            | tar -xz -C "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/linux-amd64" >> "$GITHUB_PATH"
+      - name: Default values render nothing
+        run: test -z "$(helm template agent-platform infra/helm/agent-platform)"
+      - name: Lint gated chart
+        run: helm lint --strict infra/helm/agent-platform
+      - name: Lint enabled chart
+        run: |
+          helm lint --strict infra/helm/agent-platform \
+            --set global.enabled=true \
+            --set api.enabled=true \
+            --set worker.enabled=true \
+            --set global.image.repository=registry.example/agent-platform \
+            --set global.image.tag=sha256-REPLACE \
+            --set api.existingSecret=agent-platform-secrets \
+            --set worker.existingSecret=agent-platform-secrets \
+            --set networkPolicy.ingressNamespace=ingress-nginx \
+            --set networkPolicy.database.cidr=10.0.0.0/8 \
+            --set networkPolicy.temporal.cidr=10.0.0.0/8 \
+            --set podDisruptionBudget.enabled=true
+      - name: Render enabled chart
+        run: |
+          helm template agent-platform infra/helm/agent-platform \
+            --set global.enabled=true \
+            --set api.enabled=true \
+            --set worker.enabled=true \
+            --set global.image.repository=registry.example/agent-platform \
+            --set global.image.tag=sha256-REPLACE \
+            --set api.existingSecret=agent-platform-secrets \
+            --set worker.existingSecret=agent-platform-secrets \
+            --set networkPolicy.ingressNamespace=ingress-nginx \
+            --set networkPolicy.database.cidr=10.0.0.0/8 \
+            --set networkPolicy.temporal.cidr=10.0.0.0/8 \
+            --set podDisruptionBudget.enabled=true > /dev/null
+
   django:
     name: Django (pytest)
     runs-on: ubuntu-latest

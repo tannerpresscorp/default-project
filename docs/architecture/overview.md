@@ -13,6 +13,6 @@ Shared Python packages own identity, domain types, schemas, observability and Po
 - **Usage and budgets** (`packages/usage`): an append-only token ledger with idempotent recording and optional tenant monthly admission limits. No reservations or invoicing.
 - **Evaluations** (`apps/eval_service`): a deterministic runner and fixed offline smoke dataset. No vendor or semantic grading.
 
-PostgreSQL is authoritative for platform records; Redis is provisioned locally for later ephemeral use but is not connected to the platform. Production should use managed PostgreSQL and Redis, not the local Compose stack. Temporal is used for durable workflow state, but production clustering and managed deployment remain out of scope. The manifests under `infra/k8s/` are gated, unvalidated starting points and are never applied by CI.
+PostgreSQL is authoritative for platform records; Redis is provisioned locally for later ephemeral use but is not connected to the platform. Production should use managed PostgreSQL and Redis, not the local Compose stack. Temporal is used for durable workflow state, but production clustering and managed deployment remain out of scope. The Helm chart under `infra/helm/agent-platform/` is gated, linted and rendered in CI, and never applied by CI.
 
 See [development](development.md), [security](security.md), [multi-tenancy](multi-tenancy.md), and the [ADRs](../adr/).

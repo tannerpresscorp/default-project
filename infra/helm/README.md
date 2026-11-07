@@ -1,8 +1,8 @@
 # Helm
 
-`agent-platform/` is a gated starting point for deploying the FastAPI control plane and Temporal worker. It renders nothing unless `global.enabled` and a component are explicitly enabled.
+`agent-platform/` is a gated starting point for deploying the FastAPI control plane and Temporal worker. It renders nothing unless `global.enabled` and a component are explicitly enabled. CI lints the chart and renders it with gated and enabled values; it is never applied.
 
-It is **not** production-ready and CI never applies it. There is no validated container image, ingress, certificate, secret store integration, migration job, autoscaling, service mesh or cluster-specific policy. Treat the chart as a reviewed baseline, not an operational deployment.
+It is **not** production-ready. The chart has no validated container image, ingress, certificate, secret store integration, migration job, autoscaling, service mesh or cluster-specific policy, and it is not validated against a live cluster. Treat the chart as a reviewed baseline, not an operational deployment.
 
 ```sh
 helm template agent-platform infra/helm/agent-platform \

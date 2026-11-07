@@ -67,8 +67,8 @@
 - `packages/usage` provides the append-only ledger and monthly admission budgets. Absent limits
   mean unlimited; budget checks are best-effort admission control, not reservations.
 - Real Temporal deployment, real sandbox execution, MCP/network tools and vendor model adapters
-  remain explicit non-goals, not unfinished phases. Evaluations and gated Kubernetes manifests
-  are implemented.
+  remain explicit non-goals, not unfinished phases. Evaluations and a gated, CI-linted and
+  CI-rendered Helm chart are implemented.
 - Local setup and explicit commands (including isolated integration-test database migration) are
   in `docs/architecture/development.md`. The original Django pytest config targets `api/`; run
   platform tests with `pytest -c pyproject.toml tests/unit` and `tests/integration` separately.
@@ -78,6 +78,8 @@
   apps packages tests`, `python -m mypy`, and the platform pytest commands.
 - CI also has a Python 3.12 platform job that runs these checks, downloads the Temporal CLI, and
   runs PostgreSQL/pgvector plus Temporal integration tests against a dedicated test database.
+  A separate Helm job lints the gated chart and renders it with both default and enabled values;
+  it never applies the manifests.
 
 ## Commands (verified)
 Node / workspace — root scripts delegate across all packages:
@@ -134,8 +136,9 @@ Expected verify order when changing code: **lint -> typecheck -> test** (Node), 
 - `packages/web` — React frontend consuming `api-client` (`index.html`, `src/main.tsx`,
   `src/App.tsx`, `src/style.css`, `vite.config.ts` with the Django proxy). `dist/` is gitignored.
 - `.github/workflows/ci.yml` — CI gate: `node` job (`pnpm lint/typecheck/test` +
-  `pnpm --filter web build`), `django` job (`manage.py check`, `pytest`) and `platform` job
-  (Ruff, mypy, unit and PostgreSQL integration tests); runs on push/PR at
+  `pnpm --filter web build`), `helm` job (`helm lint --strict` plus gated/enabled renders),
+  `django` job (`manage.py check`, `pytest`) and `platform` job (Ruff, mypy, unit and PostgreSQL
+  integration tests); runs on push/PR at
   github.com/tannerpresscorp/default-project. The organization blocks third-party Actions, so
   CI installs pnpm with `npm install -g pnpm@12.8.1`; `pnpm/action-setup` fails at startup.
 - Gitignored: `.venv/`, `node_modules/`, `db.sqlite3`, `__pycache__/`, `web/dist/` + build output.
