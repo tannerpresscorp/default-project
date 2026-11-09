@@ -1,0 +1,52 @@
+name: Feature request
+description: Propose a new capability or an improvement to an existing one.
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the suggestion. Please describe the problem first, then the change you have
+        in mind, so the proposal can be evaluated independently of its implementation.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What are you trying to do, and what gets in the way today?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed change
+      description: Describe the behavior or interface you would like to see.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Other approaches or workarounds you have tried or ruled out.
+    validations:
+      required: false
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      description: Which part of the repository does this affect?
+      options:
+        - Django API
+        - React web app
+        - TypeScript API clients
+        - Agent platform (apps/ and packages/)
+        - CI, tooling, or docs
+        - Not sure
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope and constraints
+      description: Anything that should stay out of scope, compatibility concerns, or related issues.
+    validations:
+      required: false

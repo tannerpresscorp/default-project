@@ -4,3 +4,13 @@ updates:
     directory: "/" # Location of package manifests
     schedule:
       interval: "daily"
+  - package-ecosystem: "npm" # pnpm workspace rooted at the repository root
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+  - package-ecosystem: "pip" # Django and platform requirements live at the root
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
