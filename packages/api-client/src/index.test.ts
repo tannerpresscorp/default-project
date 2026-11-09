@@ -55,8 +55,8 @@ test('listProducts() GETs /api/products/ and parses the paginated envelope', asy
     return jsonResponse(PAGINATED_JSON);
   });
 
-  // Trailing slash on the base URL must be stripped.
-  const result = await createApiClient('http://localhost:8000/').listProducts();
+  // Trailing slashes on the base URL must be stripped.
+  const result = await createApiClient('http://localhost:8000////').listProducts();
   assert.equal(result.count, 1);
   assert.equal(result.results.length, 1);
   assert.equal(result.results[0].price, '49.99');

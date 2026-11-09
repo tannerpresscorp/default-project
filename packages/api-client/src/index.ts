@@ -175,7 +175,9 @@ function isRecord(value: unknown): value is Record<string, unknown> {
  * optional initial token (or call `setToken` later) to authenticate requests.
  */
 export function createApiClient(baseUrl: string, options: { token?: string } = {}): ApiClient {
-  const base = baseUrl.replace(/\/+$/, '');
+  let baseEnd = baseUrl.length;
+  while (baseEnd > 0 && baseUrl[baseEnd - 1] === '/') baseEnd--;
+  const base = baseUrl.slice(0, baseEnd);
   let token: string | undefined = options.token;
 
   /** Join an endpoint path (e.g. `/api/products/`) onto the base URL. */
