@@ -135,6 +135,9 @@ Expected verify order when changing code: **lint -> typecheck -> test** (Node), 
   `index.ts` entry; `openapi-ts.config.ts` reads `../../openapi.json`.
 - `packages/web` — React frontend consuming `api-client` (`index.html`, `src/main.tsx`,
   `src/App.tsx`, `src/style.css`, `vite.config.ts` with the Django proxy). `dist/` is gitignored.
+- `.github/ISSUE_TEMPLATE/` (bug report + feature request forms) and
+  `.github/pull_request_template.md` — contribution templates. `.github/dependabot.yml` updates
+  GitHub Actions daily and pnpm/pip dependencies weekly.
 - `.github/workflows/ci.yml` — CI gate: `node` job (`pnpm lint/typecheck/test` +
   `pnpm --filter web build`), `helm` job (`helm lint --strict` plus gated/enabled renders),
   `django` job (`manage.py check`, `pytest`) and `platform` job (Ruff, mypy, unit and PostgreSQL
