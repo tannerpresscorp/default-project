@@ -76,10 +76,23 @@
   `TEMPORAL_CLI_PATH` and are skipped without it.
 - Platform checks: `python -m ruff check apps packages tests`, `python -m ruff format --check
   apps packages tests`, `python -m mypy`, and the platform pytest commands.
+- Build/run/deploy tooling lives in the root `Makefile` (`image`, `run`, `run-worker`, `stop`,
+  `helm-lint`, `helm-template`, `deploy`) with a Windows wrapper at `scripts/platform.ps1`.
+  `make dev` still starts only PostgreSQL/Redis; the `api` and `worker` Compose services are behind
+  profiles. `deploy` requires an explicit `HELM_VALUES` file and is never applied by CI.
+- The image is Linux-only. On Windows Server 2019 (no WSL2/Docker Desktop), Docker Engine and
+  Compose run in an isolated Hyper-V Linux VM selected as the `platform-vm` Docker context
+  (`ssh://platform@192.168.100.10`); the wrapper prints VM-based URLs and sets
+  `PLATFORM_BIND_ADDRESS=0.0.0.0` for `run`. Set `PLATFORM_DB_BIND_ADDRESS=0.0.0.0` only when a
+  cluster must reach PostgreSQL on `55432`. Compose PostgreSQL builds
+  `infra/local/postgres/Dockerfile` so the init SQL does not need a host bind mount. A k3s cluster
+  in the same VM (`kubectl` context `platform-vm`) supports local smoke deployments of the chart;
+  see `docs/architecture/development.md`.
 - CI also has a Python 3.12 platform job that runs these checks, downloads the Temporal CLI, and
   runs PostgreSQL/pgvector plus Temporal integration tests against a dedicated test database.
   A separate Helm job lints the gated chart and renders it with both default and enabled values;
-  it never applies the manifests.
+  it never applies the manifests. An image job builds `infra/docker/Dockerfile` and runs non-root,
+  read-only smoke tests.
 
 ## Commands (verified)
 Node / workspace — root scripts delegate across all packages:

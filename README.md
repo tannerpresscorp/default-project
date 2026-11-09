@@ -20,6 +20,7 @@ The two systems share one repository and one CI gate, but they have independent 
 - [Quick start: agent platform](#quick-start-agent-platform)
 - [Platform components](#platform-components)
 - [Common commands](#common-commands)
+- [Build, run and deploy](#build-run-and-deploy)
 - [Regenerating the OpenAPI client](#regenerating-the-openapi-client)
 - [Configuration](#configuration)
 - [Repository layout](#repository-layout)
@@ -55,7 +56,7 @@ The two systems share one repository and one CI gate, but they have independent 
 | Python | 3.12+ for the platform (pinned in CI); the Django CI job uses 3.14 |
 | Node.js | 24+ (CI uses 26) |
 | pnpm | 12.8.1 (`packageManager` in `package.json`) |
-| Docker | Optional; used by the local platform Compose stack |
+| Docker | Optional; used by the local platform Compose stack. A Linux engine is required for the image and Compose stack. |
 | Temporal CLI | Optional; required only for platform workflow integration tests |
 
 The Django and platform environments are separate. Do not install both dependency sets into one virtual environment.
@@ -241,6 +242,39 @@ Use `.venv/bin/python` on Unix.
 
 On Unix, `make lint`, `make typecheck`, `make test`, `make migrate`, `make integration-test` and `make worker` wrap the same commands. Integration tests require a migrated `platform_test` database, `PLATFORM_TEST_DATABASE_URL`, and optionally `TEMPORAL_CLI_PATH` for the Temporal workflow tests.
 
+## Build, run and deploy
+
+The platform ships with a container image, a local Compose workflow and a gated Helm chart. On Unix:
+
+| Task | Command |
+| --- | --- |
+| Build the platform image | `make build` (or `make image`) |
+| Build the web UI | `make build-web` |
+| Start local dependencies | `make db-up` |
+| Run API and migrations | `make run` |
+| Run the Temporal worker | `make run-worker` |
+| Stop API/worker containers | `make stop` |
+| Remove the local stack | `make down` |
+| Follow API/worker logs | `make logs` |
+| Lint the Helm chart | `HELM_VALUES=../deploy/agent-platform.yaml make helm-lint` |
+| Render the Helm chart | `HELM_VALUES=../deploy/agent-platform.yaml make helm-template` |
+| Deploy the Helm chart | `HELM_VALUES=... IMAGE_REPOSITORY=... IMAGE_TAG=... HELM_CONTEXT=staging make deploy` |
+
+`make run` starts PostgreSQL and Redis, applies migrations in the image, then runs the API at <http://127.0.0.1:8001>. Readiness and `/v1` still require OIDC configuration; liveness works without it. The worker target expects Temporal at `host.docker.internal:7233` by default. Override `IMAGE_REPOSITORY` and `IMAGE_TAG` to build and run a differently tagged image.
+
+On Windows, use the PowerShell wrapper instead of `make`:
+
+```powershell
+.\scripts\platform.ps1 build
+.\scripts\platform.ps1 run
+.\scripts\platform.ps1 helm-template -Values ..\deploy\agent-platform.yaml
+.\scripts\platform.ps1 deploy -Values ..\deploy\agent-platform.yaml -KubeContext staging
+```
+
+On Windows Server 2019, WSL2 and Docker Desktop are unavailable. Run Docker Engine and Compose in an isolated Hyper-V Linux VM, select it as the Docker context (`docker context use platform-vm`), and use the same wrapper. Published ports then belong to the VM, so the wrapper prints the VM address (for example `http://192.168.100.10:8001`) instead of loopback. A k3s cluster in that VM can host a local smoke deployment of the chart; see [the development guide](docs/architecture/development.md#windows-server-with-a-linux-vm). This does not make the chart production-ready.
+
+Deployment is gated and requires a real Kubernetes cluster, an immutable image digest, a secret manager, managed PostgreSQL/Temporal and the checks in the [operations runbook](docs/runbooks/platform-operations.md). Start from [`values.example.yaml`](infra/helm/agent-platform/values.example.yaml); never commit real secrets. `deploy` refuses `IMAGE_TAG=local`, so provide an immutable tag or digest. This repository does not currently support a production deployment.
+
 ## Regenerating the OpenAPI client
 
 When the Django API schema changes, regenerate and commit both artifacts:
@@ -304,6 +338,7 @@ Python apps read the process environment; they do not load `.env` files. Templat
 │   └── mcp/                    Non-goal boundary (no MCP transport)
 ├── docs/                       Architecture, ADRs and runbooks
 ├── infra/                      Dockerfile, Helm chart and local Compose stack
+├── scripts/                    PowerShell wrapper for build, run and deploy
 ├── tests/                      Platform unit and integration tests
 ├── openapi.json                Committed Django API schema snapshot
 ├── manage.py                   Django entry point

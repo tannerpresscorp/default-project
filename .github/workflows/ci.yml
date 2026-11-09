@@ -49,6 +49,12 @@ jobs:
             --set networkPolicy.database.cidr=10.0.0.0/8 \
             --set networkPolicy.temporal.cidr=10.0.0.0/8 \
             --set podDisruptionBudget.enabled=true
+      - name: Lint and render example values
+        run: |
+          helm lint --strict infra/helm/agent-platform \
+            -f infra/helm/agent-platform/values.example.yaml
+          helm template agent-platform infra/helm/agent-platform \
+            -f infra/helm/agent-platform/values.example.yaml > /dev/null
       - name: Render enabled chart
         run: |
           helm template agent-platform infra/helm/agent-platform \
