@@ -1,3 +1,5 @@
+import asyncio
+import json
 import time
 from uuid import uuid4
 
@@ -19,7 +21,7 @@ def signing_key():
     return rsa.generate_private_key(public_exponent=65537, key_size=2048)
 
 
-def token(key, **overrides):
+def token(key, *, kid="key-1", **overrides):
     claims = {
         "iss": "https://issuer.example/",
         "aud": "platform",
@@ -28,7 +30,27 @@ def token(key, **overrides):
         "tenant_id": str(uuid4()),
     }
     claims.update(overrides)
-    return jwt.encode(claims, key, algorithm="RS256", headers={"kid": "key-1"})
+    return jwt.encode(claims, key, algorithm="RS256", headers={"kid": kid})
+
+
+def public_jwk(key, kid):
+    from jwt.algorithms import RSAAlgorithm
+
+    jwk = json.loads(RSAAlgorithm.to_jwk(key.public_key()))
+    jwk["kid"] = kid
+    return jwk
+
+
+def verifier_for(handler, **overrides):
+    options = {
+        "issuer": "https://issuer.example/",
+        "audience": "platform",
+        "jwks_url": "https://issuer.example/keys",
+        "tenant_claim": "tenant_id",
+        "transport": httpx.MockTransport(handler),
+    }
+    options.update(overrides)
+    return IdentityVerifier(**options)
 
 
 def test_verified_identity_derives_tenant_from_signed_claim(signing_key):
@@ -103,30 +125,131 @@ def test_verifier_requires_secure_oidc_configuration():
 
 @pytest.mark.anyio
 async def test_verifier_fetches_only_configured_jwks_and_rejects_unknown_key(signing_key):
-    import json
-
-    from jwt.algorithms import RSAAlgorithm
-
-    public_jwk = json.loads(RSAAlgorithm.to_jwk(signing_key.public_key()))
-    public_jwk["kid"] = "key-1"
     calls = []
 
     def handler(request):
         calls.append(str(request.url))
-        return httpx.Response(200, json={"keys": [public_jwk]})
+        return httpx.Response(200, json={"keys": [public_jwk(signing_key, "key-1")]})
 
-    verifier = IdentityVerifier(
-        issuer="https://issuer.example/",
-        audience="platform",
-        jwks_url="https://issuer.example/keys",
-        tenant_claim="tenant_id",
-        transport=httpx.MockTransport(handler),
-    )
+    verifier = verifier_for(handler)
     assert (await verifier.verify(token(signing_key))).subject == "user-123"
     assert calls == ["https://issuer.example/keys"]
     unknown = jwt.encode({"sub": "x"}, signing_key, algorithm="RS256", headers={"kid": "unknown"})
     with pytest.raises(AuthenticationError):
         await verifier.verify(unknown)
+    # The fresh cache is not refetched while the refresh interval is active.
+    assert calls == ["https://issuer.example/keys"]
+
+
+@pytest.mark.anyio
+async def test_verifier_caches_jwks_between_requests(signing_key):
+    calls = []
+
+    def handler(request):
+        calls.append(str(request.url))
+        return httpx.Response(200, json={"keys": [public_jwk(signing_key, "key-1")]})
+
+    verifier = verifier_for(handler)
+    for _ in range(5):
+        assert (await verifier.verify(token(signing_key))).subject == "user-123"
+    assert calls == ["https://issuer.example/keys"]
+
+
+@pytest.mark.anyio
+async def test_concurrent_requests_share_one_jwks_refresh(signing_key):
+    calls = []
+
+    def handler(request):
+        calls.append(str(request.url))
+        return httpx.Response(200, json={"keys": [public_jwk(signing_key, "key-1")]})
+
+    verifier = verifier_for(handler)
+    principals = await asyncio.gather(*(verifier.verify(token(signing_key)) for _ in range(10)))
+    assert all(principal.subject == "user-123" for principal in principals)
+    assert calls == ["https://issuer.example/keys"]
+
+
+@pytest.mark.anyio
+async def test_verifier_refreshes_once_for_a_rotated_key(signing_key):
+    rotated = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    clock = [0.0]
+    calls = []
+
+    def handler(request):
+        calls.append(str(request.url))
+        keys = [public_jwk(signing_key, "key-1")]
+        if len(calls) > 1:
+            keys.append(public_jwk(rotated, "key-2"))
+        return httpx.Response(200, json={"keys": keys})
+
+    verifier = verifier_for(handler, refresh_min_interval_seconds=0, clock=lambda: clock[0])
+    assert (await verifier.verify(token(signing_key))).subject == "user-123"
+    assert (await verifier.verify(token(rotated, kid="key-2"))).subject == "user-123"
+    assert len(calls) == 2
+
+
+@pytest.mark.anyio
+async def test_unknown_key_is_rejected_after_a_rate_limited_refresh(signing_key):
+    clock = [0.0]
+    calls = []
+
+    def handler(request):
+        calls.append(str(request.url))
+        return httpx.Response(200, json={"keys": [public_jwk(signing_key, "key-1")]})
+
+    verifier = verifier_for(handler, clock=lambda: clock[0])
+    assert (await verifier.verify(token(signing_key))).subject == "user-123"
+    clock[0] = 31.0
+    with pytest.raises(AuthenticationError):
+        await verifier.verify(token(signing_key, kid="missing"))
+    assert len(calls) == 2
+    # The failed lookup still refreshed the cache, so the next attempt waits again.
+    with pytest.raises(AuthenticationError):
+        await verifier.verify(token(signing_key, kid="missing"))
+    assert len(calls) == 2
+
+
+@pytest.mark.anyio
+async def test_cached_keys_expire_and_provider_failure_denies_access(signing_key):
+    clock = [0.0]
+    failing = [False]
+    calls = []
+
+    def handler(request):
+        calls.append(str(request.url))
+        if failing[0]:
+            return httpx.Response(503)
+        return httpx.Response(200, json={"keys": [public_jwk(signing_key, "key-1")]})
+
+    verifier = verifier_for(
+        handler, cache_ttl_seconds=10, refresh_min_interval_seconds=0, clock=lambda: clock[0]
+    )
+    assert (await verifier.verify(token(signing_key))).subject == "user-123"
+    clock[0] = 11.0
+    failing[0] = True
+    with pytest.raises(IdentityUnavailable):
+        await verifier.verify(token(signing_key))
+    assert len(calls) == 2
+
+
+def test_verifier_rejects_invalid_cache_configuration():
+    with pytest.raises(ValueError):
+        IdentityVerifier(
+            issuer="https://issuer.example/",
+            audience="platform",
+            jwks_url="https://issuer.example/keys",
+            tenant_claim="tenant_id",
+            cache_ttl_seconds=0,
+        )
+    with pytest.raises(ValueError):
+        IdentityVerifier(
+            issuer="https://issuer.example/",
+            audience="platform",
+            jwks_url="https://issuer.example/keys",
+            tenant_claim="tenant_id",
+            cache_ttl_seconds=10,
+            refresh_min_interval_seconds=11,
+        )
 
 
 @pytest.fixture

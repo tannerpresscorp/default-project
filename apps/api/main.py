@@ -72,6 +72,8 @@ def create_app(
             audience=settings.oidc_audience,
             jwks_url=settings.oidc_jwks_url,
             tenant_claim=settings.oidc_tenant_claim,
+            cache_ttl_seconds=settings.oidc_jwks_cache_ttl_seconds,
+            refresh_min_interval_seconds=settings.oidc_jwks_refresh_min_interval_seconds,
         )
 
     @asynccontextmanager
