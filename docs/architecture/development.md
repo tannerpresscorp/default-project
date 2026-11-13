@@ -81,3 +81,52 @@ $env:PLATFORM_MIGRATION_DATABASE_URL='postgresql+asyncpg://platform_migrator:loc
 ```
 
 For integration tests, point the migration URL at `/platform_test`, migrate that database, and set `PLATFORM_TEST_DATABASE_URL` to the application-role URL ending in `/platform_test`. Set `TEMPORAL_CLI_PATH` to a Temporal CLI executable to run the workflow tests. Then run `.\.venv-platform\Scripts\python.exe -m pytest -c pyproject.toml tests/integration`. Set the three OIDC variables in the same PowerShell session before starting the API to make readiness pass.
+
+## Container workflow
+
+The repository can build and run the platform without a host Python environment. Docker Compose v2 is required for the local run commands.
+
+```sh
+make image       # build agent-platform:local
+make run         # PostgreSQL + Redis, migrations, then the API
+make run-worker  # PostgreSQL + Redis, then the Temporal worker
+make stop
+```
+
+The `api` and `worker` Compose services are behind profiles, so `make dev` still starts only PostgreSQL and Redis. The API listens on `http://127.0.0.1:8001` (or the Docker host's IP when Docker runs in a remote VM); without OIDC configuration liveness works but readiness and `/v1` fail closed. The worker defaults to Temporal at `host.docker.internal:7233`.
+
+On Windows, use `.\scripts\platform.ps1 build`, `run`, `run-worker`, `stop` or `logs`. Deployment targets (`helm-lint`, `helm-template`, `deploy`) use the chart in `infra/helm/agent-platform` and require an explicit values file; see [the Helm README](../../infra/helm/README.md). Follow the [operations runbook](../runbooks/platform-operations.md) before applying anything to a real cluster.
+
+### Windows Server with a Linux VM
+
+Windows Server 2019 cannot run WSL2 or Docker Desktop, so the Linux-only image needs a real Linux Docker engine. The supported pattern is an isolated Hyper-V VM that runs Docker Engine and Compose, with the Windows CLI connected over SSH:
+
+```powershell
+# One-time: create an internal NAT switch and a Linux VM (Ubuntu 24.04 cloud image).
+New-VMSwitch -Name PlatformNAT -SwitchType Internal
+New-NetIPAddress -InterfaceAlias 'vEthernet (PlatformNAT)' -IPAddress 192.168.100.1 -PrefixLength 24
+New-NetNat -Name PlatformNAT -InternalIPInterfaceAddressPrefix 192.168.100.0/24
+
+# Point the Docker CLI at the VM and make it the default context.
+docker context create platform-vm --docker 'host=ssh://platform@192.168.100.10'
+docker context use platform-vm
+docker info --format '{{.OSType}}'   # must print: linux
+```
+
+Add an SSH host entry (for example in `%USERPROFILE%\.ssh\config`) so `docker` and `kubectl` can authenticate without repeating flags. Install Buildx as a CLI plugin if `docker buildx` is unavailable; `docker build` then uses the VM's Linux BuildKit.
+
+Because the containers run in the VM, ports published by Compose bind on the VM, not on Windows. The wrapper sets `PLATFORM_BIND_ADDRESS=0.0.0.0` for `run`, so reach the API at `http://192.168.100.10:8001` in the example above; it prints the correct host automatically. Set `PLATFORM_DB_BIND_ADDRESS=0.0.0.0` only when another host (such as a cluster in the same VM) must reach PostgreSQL on `55432`. Both variables default to `127.0.0.1` for Unix/local use.
+
+The Compose PostgreSQL service builds a small derivative image (`infra/local/postgres/Dockerfile`) that bakes in `postgres-init.sql`. A host bind mount would point at a Windows path that does not exist inside the VM.
+
+A lightweight Kubernetes cluster can run in the same VM with k3s:
+
+```sh
+# Inside the VM
+curl -sfL https://get.k3s.io | sh -
+# On Windows, copy /etc/rancher/k3s/k3s.yaml, replace 127.0.0.1 with the VM IP
+# and rename the context to platform-vm in %USERPROFILE%\.kube\config.
+kubectl get nodes
+```
+
+Import a local image into k3s containerd (`docker save agent-platform:smoke | sudo k3s ctr images import -`) when using `pullPolicy: Never`. A cluster-reachable database URL must use the VM IP rather than `127.0.0.1`. This is a local smoke deployment only; the chart remains gated and is never applied by CI.

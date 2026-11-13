@@ -2,7 +2,7 @@ fastapi==0.162.0
 uvicorn[standard]==0.54.0
 pydantic-settings==2.16.2
 jsonschema==4.26.0
-SQLAlchemy[asyncio]==2.0.57
+SQLAlchemy[asyncio]==2.1.8
 asyncpg==0.32.0
 alembic==1.20.1
 httpx==0.28.1
