@@ -49,6 +49,12 @@ jobs:
             --set networkPolicy.database.cidr=10.0.0.0/8 \
             --set networkPolicy.temporal.cidr=10.0.0.0/8 \
             --set podDisruptionBudget.enabled=true
+      - name: Lint and render example values
+        run: |
+          helm lint --strict infra/helm/agent-platform \
+            -f infra/helm/agent-platform/values.example.yaml
+          helm template agent-platform infra/helm/agent-platform \
+            -f infra/helm/agent-platform/values.example.yaml > /dev/null
       - name: Render enabled chart
         run: |
           helm template agent-platform infra/helm/agent-platform \
@@ -63,6 +69,33 @@ jobs:
             --set networkPolicy.database.cidr=10.0.0.0/8 \
             --set networkPolicy.temporal.cidr=10.0.0.0/8 \
             --set podDisruptionBudget.enabled=true > /dev/null
+
+  image:
+    name: Container image (build and smoke)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build pinned image
+        run: docker build -f infra/docker/Dockerfile -t agent-platform:ci .
+      - name: Import and non-root smoke tests
+        run: |
+          docker run --rm --read-only --tmpfs /tmp agent-platform:ci \
+            python -c "import apps.api.main"
+          test "$(docker run --rm agent-platform:ci id -u)" = "10001"
+      - name: Read-only health smoke test
+        run: |
+          docker run -d --name platform-smoke --read-only --tmpfs /tmp \
+            -p 18001:8001 agent-platform:ci
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:18001/health/live >/dev/null; then
+              docker rm -f platform-smoke
+              exit 0
+            fi
+            sleep 1
+          done
+          docker logs platform-smoke
+          docker rm -f platform-smoke
+          exit 1
 
   django:
     name: Django (pytest)

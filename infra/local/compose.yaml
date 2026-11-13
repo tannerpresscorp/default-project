@@ -1,16 +1,31 @@
 name: agent-platform-foundation
+
+x-platform-image: &platform-image
+  image: ${PLATFORM_IMAGE:-agent-platform:local}
+  build:
+    context: ../..
+    dockerfile: infra/docker/Dockerfile
+  read_only: true
+  tmpfs:
+    - /tmp
+  restart: unless-stopped
+
 services:
   postgres:
-    image: pgvector/pgvector:pg16
+    # Build a tiny derivative so the init SQL travels with the build context.
+    # A host bind mount would break when Docker runs in a remote Linux VM.
+    build:
+      context: .
+      dockerfile: postgres/Dockerfile
+    image: agent-platform-postgres:local
     environment:
       POSTGRES_USER: platform_migrator
       POSTGRES_PASSWORD: local_migrator_only
       POSTGRES_DB: platform
     ports:
-      - "127.0.0.1:55432:5432"
+      - "${PLATFORM_DB_BIND_ADDRESS:-127.0.0.1}:55432:5432"
     volumes:
       - platform_postgres:/var/lib/postgresql/data
-      - ./postgres-init.sql:/docker-entrypoint-initdb.d/001-init.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U platform_migrator -d platform"]
       interval: 5s
@@ -25,5 +40,43 @@ services:
       interval: 5s
       timeout: 3s
       retries: 20
+  api:
+    <<: *platform-image
+    profiles: ["api"]
+    environment:
+      PLATFORM_DATABASE_URL: postgresql+asyncpg://platform_app:local_app_only@postgres:5432/platform
+      PLATFORM_OIDC_ISSUER: ${PLATFORM_OIDC_ISSUER:-}
+      PLATFORM_OIDC_AUDIENCE: ${PLATFORM_OIDC_AUDIENCE:-}
+      PLATFORM_OIDC_JWKS_URL: ${PLATFORM_OIDC_JWKS_URL:-}
+      PLATFORM_OIDC_TENANT_CLAIM: ${PLATFORM_OIDC_TENANT_CLAIM:-tenant_id}
+      PLATFORM_TEMPORAL_ADDRESS: ${PLATFORM_TEMPORAL_ADDRESS:-}
+      PLATFORM_TEMPORAL_NAMESPACE: ${PLATFORM_TEMPORAL_NAMESPACE:-default}
+      PLATFORM_TEMPORAL_TASK_QUEUE: ${PLATFORM_TEMPORAL_TASK_QUEUE:-agent-runs}
+      PLATFORM_OTEL_ENABLED: ${PLATFORM_OTEL_ENABLED:-true}
+      PLATFORM_OTEL_TRACES_ENDPOINT: ${PLATFORM_OTEL_TRACES_ENDPOINT:-}
+      PLATFORM_SENTRY_DSN: ${PLATFORM_SENTRY_DSN:-}
+      PLATFORM_SENTRY_ENVIRONMENT: ${PLATFORM_SENTRY_ENVIRONMENT:-development}
+      PLATFORM_SENTRY_TRACES_SAMPLE_RATE: ${PLATFORM_SENTRY_TRACES_SAMPLE_RATE:-0}
+    ports:
+      # The Windows wrapper exports PLATFORM_BIND_ADDRESS=0.0.0.0 because the
+      # published port belongs to the Linux VM, not to the Windows host.
+      - "${PLATFORM_BIND_ADDRESS:-127.0.0.1}:8001:8001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+  worker:
+    <<: *platform-image
+    profiles: ["worker"]
+    command: ["python", "-m", "apps.workflow_worker.worker"]
+    environment:
+      PLATFORM_DATABASE_URL: postgresql+asyncpg://platform_app:local_app_only@postgres:5432/platform
+      PLATFORM_TEMPORAL_ADDRESS: ${PLATFORM_TEMPORAL_ADDRESS:-host.docker.internal:7233}
+      PLATFORM_TEMPORAL_NAMESPACE: ${PLATFORM_TEMPORAL_NAMESPACE:-default}
+      PLATFORM_TEMPORAL_TASK_QUEUE: ${PLATFORM_TEMPORAL_TASK_QUEUE:-agent-runs}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      postgres:
+        condition: service_healthy
 volumes:
   platform_postgres:
