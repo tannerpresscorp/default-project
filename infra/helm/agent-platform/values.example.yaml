@@ -1,0 +1,45 @@
+# Example deployment values. Copy this file outside the repository, replace
+# every placeholder, and keep real secrets in a secret manager.
+#
+#   HELM_VALUES=../deploy/agent-platform.yaml make helm-template
+#   HELM_VALUES=../deploy/agent-platform.yaml make deploy
+#
+# The Makefile always forces global.enabled=true and overrides the image
+# repository/tag from IMAGE_REPOSITORY and IMAGE_TAG.
+
+global:
+  enabled: true
+  image:
+    repository: registry.example/agent-platform
+    tag: sha256-REPLACE
+  imagePullSecrets:
+    - name: registry-credentials
+
+api:
+  enabled: true
+  # Must contain PLATFORM_DATABASE_URL, OIDC settings and optional Sentry values.
+  existingSecret: agent-platform-secrets
+  env:
+    PLATFORM_OTEL_ENABLED: "true"
+    PLATFORM_OTEL_TRACES_ENDPOINT: "https://otel.example/v1/traces"
+
+worker:
+  enabled: true
+  # Must contain PLATFORM_DATABASE_URL and Temporal connection settings.
+  existingSecret: agent-platform-secrets
+  env:
+    PLATFORM_TEMPORAL_ADDRESS: temporal.example:7233
+    PLATFORM_TEMPORAL_NAMESPACE: default
+    PLATFORM_TEMPORAL_TASK_QUEUE: agent-runs
+
+networkPolicy:
+  enabled: true
+  ingressNamespace: ingress-nginx
+  database:
+    cidr: 10.0.0.0/8
+  temporal:
+    cidr: 10.0.0.0/8
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1

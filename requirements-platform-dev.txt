@@ -1,4 +1,4 @@
 -r requirements-platform.txt
 pytest==9.2.0
-ruff==0.17.3
-mypy==1.20.2
+ruff==0.17.4
+mypy==2.4.1

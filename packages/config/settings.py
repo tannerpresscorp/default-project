@@ -13,6 +13,8 @@ class Settings(BaseSettings):
     oidc_audience: str | None = None
     oidc_jwks_url: str | None = None
     oidc_tenant_claim: str = "tenant_id"
+    oidc_jwks_cache_ttl_seconds: float = Field(default=300.0, gt=0, le=3600)
+    oidc_jwks_refresh_min_interval_seconds: float = Field(default=30.0, ge=0, le=3600)
     otel_enabled: bool = True
     otel_traces_endpoint: str | None = None
     sentry_dsn: str | None = None
